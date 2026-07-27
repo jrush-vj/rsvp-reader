@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSVP Reader</title>
+<style>
+  :root{
+    --bg:#000;
+    --line:#292929;
+    --tick:#3c3c3c;
+    --text:#f2f1ee;
+    --accent:#e0483d;
+    --muted:#6e6e6e;
+    --panel:#0e0e0e;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:var(--bg); overflow:hidden;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+  button, input{ font-family: inherit; }
+  :focus-visible{ outline:1px solid var(--accent); outline-offset:2px; }
+  #app{ position:relative; width:100vw; height:100vh; }
+
+  /* ---------------- Upload / setup screen ---------------- */
+  #uploadScreen{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:20px; text-align:center; padding:24px;
+  }
+  #uploadScreen.hidden{ display:none; }
+
+  .drop{
+    border:1px dashed var(--line);
+    border-radius:2px;
+    padding:44px 60px;
+    color:var(--text);
+    font-size:19px;
+    cursor:pointer;
+    transition:border-color .2s, color .2s;
+  }
+  .drop:hover, .drop.drag{ border-color:var(--accent); color:#fff; }
+  .drop small{
+    display:block; margin-top:10px;
+    font-family: system-ui, sans-serif; font-size:12.5px; font-style:italic;
+    color:var(--muted);
+  }
+  #fileInput{ display:none; }
+
+  .altAction{
+    font-family: system-ui, sans-serif; font-size:13px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline;
+  }
+  .altAction:hover{ color:var(--text); }
+
+  #pasteBox{ display:none; flex-direction:column; gap:10px; width:min(560px,80vw); }
+  #pasteBox.show{ display:flex; }
+  #pasteBox textarea{
+    background:var(--panel); color:var(--text); border:1px solid var(--line);
+    font-family: Georgia, serif; font-size:15px; padding:14px; border-radius:2px;
+    min-height:130px; resize:vertical;
+  }
+  #pasteBox .row{ display:flex; gap:10px; justify-content:center; }
+
+  #backendRow{
+    font-family: system-ui, sans-serif; font-size:12px; color:var(--muted);
+    display:flex; gap:8px; align-items:center;
+  }
+  #backendRow input{
+    background:var(--panel); border:1px solid var(--line); color:var(--text);
+    font-size:12px; padding:6px 8px; border-radius:2px; width:230px;
+  }
+
+  #uploadError{
+    font-family: system-ui, sans-serif; font-size:13px; color:var(--accent);
+    min-height:16px;
+  }
+
+  button.primary{
+    background:var(--text); color:#000; border:none; padding:9px 18px;
+    font-family: system-ui, sans-serif; font-size:13px; border-radius:2px; cursor:pointer;
+  }
+  button.primary:hover{ background:#fff; }
+
+  /* ---------------- Reader screen ---------------- */
+  #readerScreen{ position:absolute; inset:0; display:none; }
+  #readerScreen.active{ display:block; }
+
+  #stage{
+    position:absolute; left:0; right:0; top:50%;
+    transform:translateY(-50%);
+    height:42vh;
+    display:flex; align-items:center; justify-content:center;
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+  }
+  .tick{ position:absolute; left:50%; width:1px; background:var(--tick); }
+  .tick.top{ top:0; height:18%; }
+  .tick.bottom{ bottom:0; height:18%; }
+
+  #wordRow{
+    display:flex; align-items:baseline; justify-content:center; width:100%;
+    font-size: clamp(40px, 7vw, 92px);
+    line-height:1;
+    padding:0 5vw;
+  }
+  #pre, #post{ flex:1 1 0; white-space:pre; color:var(--text); }
+  #pre{ text-align:right; }
+  #post{ text-align:left; }
+  #orp{ color:var(--accent); white-space:pre; }
+
+  #wpmTag{
+    position:absolute; right:22px; bottom:15px;
+    font-family: system-ui, sans-serif; font-style:italic; font-size:14px;
+    color:var(--muted); letter-spacing:.2px;
+    transition:opacity .3s ease;
+  }
+  #wpmTag.dim{ opacity:0; }
+
+  /* ---------------- Controls overlay ---------------- */
+  #controls{
+    position:absolute; left:0; right:0; bottom:0;
+    display:flex; flex-direction:column; gap:8px;
+    padding:16px 22px 14px;
+    background:linear-gradient(to top, rgba(0,0,0,.9), rgba(0,0,0,0));
+    font-family: system-ui, sans-serif;
+    transition:opacity .35s ease;
+    opacity:1;
+  }
+  #controls.faded{ opacity:0; pointer-events:none; }
+
+  .progressRow{ display:flex; align-items:center; gap:10px; }
+  .progressRow input[type=range]{ flex:1; }
+  .meta{ color:var(--muted); font-size:12px; white-space:nowrap; }
+
+  .controlBar{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .controlBar .spacer{ flex:1; }
+  .fname{
+    color:var(--muted); font-size:12px; max-width:220px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .iconBtn{
+    background:none; border:1px solid var(--line); color:var(--text);
+    width:34px; height:34px; border-radius:50%; cursor:pointer;
+    font-size:14px; display:flex; align-items:center; justify-content:center;
+  }
+  .iconBtn:hover{ border-color:var(--muted); }
+  .speedGroup{ display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+  .speedGroup input[type=range]{ width:120px; }
+  .linkBtn{ background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; text-decoration:underline; }
+  .linkBtn:hover{ color:var(--text); }
+
+  input[type=range]{ -webkit-appearance:none; height:2px; background:var(--line); border-radius:2px; outline:none; }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:11px; height:11px; border-radius:50%;
+    background:var(--text); cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{ width:11px; height:11px; border-radius:50%; background:var(--text); border:none; cursor:pointer; }
+
+  @media (max-width: 560px){
+    .fname{ display:none; }
+    .drop{ padding:34px 30px; font-size:16px; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    #controls{ transition:none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Upload / setup screen -->
+  <div id="uploadScreen">
+    <label class="drop" id="dropZone">
+      Drop a PDF here, or click to browse
+      <small>Extraction runs on your own local backend — nothing leaves your machine.</small>
+      <input type="file" id="fileInput" accept="application/pdf">
+    </label>
+
+    <button class="altAction" id="pasteToggle">…or paste text instead</button>
+
+    <div id="pasteBox">
+      <textarea id="pasteText" placeholder="Paste any text here to read it without a PDF or backend."></textarea>
+      <div class="row">
+        <button class="primary" id="pasteGo">Start reading</button>
+      </div>
+    </div>
+
+    <div id="backendRow">
+      Backend URL:
+      <input type="text" id="backendUrl" value="http://localhost:5000">
+    </div>
+
+    <div id="uploadError"></div>
+  </div>
+
+  <!-- Reader screen -->
+  <div id="readerScreen">
+    <div id="stage">
+      <div class="tick top"></div>
+      <div class="tick bottom"></div>
+      <div id="wordRow">
+        <span id="pre"></span><span id="orp"></span><span id="post"></span>
+      </div>
+    </div>
+    <div id="wpmTag">600 wpm</div>
+
+    <div id="controls">
+      <div class="progressRow">
+        <span class="meta" id="posLabel">0 / 0</span>
+        <input type="range" id="seek" min="0" max="0" value="0">
+        <span class="meta" id="timeLabel">0:00 left</span>
+      </div>
+      <div class="controlBar">
+        <span class="fname" id="fname"></span>
+        <button class="iconBtn" id="restartBtn" title="Restart (R)">&#8635;</button>
+        <button class="iconBtn" id="backBtn" title="Back 10s (&#8592;)">&#9198;</button>
+        <button class="iconBtn" id="playBtn" title="Play / pause (Space)">&#9654;</button>
+        <button class="iconBtn" id="fwdBtn" title="Forward 10s (&#8594;)">&#9197;</button>
+        <div class="speedGroup">
+          <span id="speedLabel">600</span> wpm
+          <input type="range" id="speedSlider" min="150" max="900" step="25" value="600">
+        </div>
+        <span class="spacer"></span>
+        <button class="linkBtn" id="newFileBtn">New file</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const PUNCT_SET = new Set('!"#$%&\'()*+,-./:;<=>?@[]^_`{|}~\u201c\u201d\u2018\u2019');
+
+  // ---------------- word-model helpers (mirrors backend app.py) ----------------
+  function coreWord(word){
+    let start = 0, end = word.length;
+    while(start < end && PUNCT_SET.has(word[start])) start++;
+    while(end > start && PUNCT_SET.has(word[end - 1])) end--;
+    return word.slice(start, end);
+  }
+  function leadingPunctCount(word){
+    let n = 0;
+    for(const ch of word){ if(PUNCT_SET.has(ch)) n++; else break; }
+    return n;
+  }
+  function orpIndex(word){
+    const core = coreWord(word);
+    const length = core.length || word.length;
+    let idx;
+    if(length <= 1) idx = 0;
+    else if(length <= 5) idx = 1;
+    else if(length <= 9) idx = 2;
+    else if(length <= 13) idx = 3;
+    else idx = 4;
+    return Math.min(idx + leadingPunctCount(word), Math.max(word.length - 1, 0));
+  }
+  function pauseMultiplier(word){
+    let m = 1.0;
+    if(/[.!?]$/.test(word)) m = 2.6;
+    else if(/[;:]$/.test(word)) m = 2.0;
+    else if(/[,)"\u201d]$/.test(word)) m = 1.5;
+    const core = coreWord(word);
+    if(core.length >= 10) m += 0.3;
+    if(core.length >= 14) m += 0.3;
+    return Math.round(m * 100) / 100;
+  }
+  function tokenize(text){
+    return text.split(/\s+/).filter(Boolean).map(w => ({
+      text: w, orp: orpIndex(w), pause: pauseMultiplier(w)
+    }));
+  }
+
+  // ---------------- state ----------------
+  let words = [];
+  let idx = 0;
+  let playing = false;
+  let wpm = parseInt(localStorage.getItem('rsvp_wpm'), 10) || 600;
+  let timer = null;
+  let hideTimer = null;
+
+  // ---------------- elements ----------------
+  const uploadScreen = document.getElementById('uploadScreen');
+  const readerScreen = document.getElementById('readerScreen');
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const uploadError = document.getElementById('uploadError');
+  const pasteToggle = document.getElementById('pasteToggle');
+  const pasteBox = document.getElementById('pasteBox');
+  const pasteText = document.getElementById('pasteText');
+  const pasteGo = document.getElementById('pasteGo');
+  const backendUrl = document.getElementById('backendUrl');
+
+  const pre = document.getElementById('pre');
+  const orpEl = document.getElementById('orp');
+  const post = document.getElementById('post');
+  const wpmTag = document.getElementById('wpmTag');
+  const controls = document.getElementById('controls');
+  const seek = document.getElementById('seek');
+  const posLabel = document.getElementById('posLabel');
+  const timeLabel = document.getElementById('timeLabel');
+  const fname = document.getElementById('fname');
+  const playBtn = document.getElementById('playBtn');
+  const speedSlider = document.getElementById('speedSlider');
+  const speedLabel = document.getElementById('speedLabel');
+  const newFileBtn = document.getElementById('newFileBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const backBtn = document.getElementById('backBtn');
+  const fwdBtn = document.getElementById('fwdBtn');
+
+  // If this page is being served BY the Flask app itself (not opened as a
+  // local file://), default to same-origin so it works from any address
+  // (localhost, LAN IP, etc.) without editing anything.
+  const sameOriginDefault = (location.protocol !== 'file:' && location.origin && location.origin !== 'null')
+    ? location.origin
+    : backendUrl.value;
+  backendUrl.value = localStorage.getItem('rsvp_backend') || sameOriginDefault;
+  speedSlider.value = wpm;
+  speedLabel.textContent = wpm;
+  wpmTag.textContent = wpm + ' wpm';
+
+  // ---------------- upload screen wiring ----------------
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag');
+    if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => { if(fileInput.files.length) handleFile(fileInput.files[0]); });
+
+  pasteToggle.addEventListener('click', () => pasteBox.classList.toggle('show'));
+  pasteGo.addEventListener('click', () => {
+    const t = pasteText.value.trim();
+    if(!t){ uploadError.textContent = 'Paste some text first.'; return; }
+    words = tokenize(t);
+    startReading('Pasted text');
+  });
+
+  async function handleFile(file){
+    uploadError.textContent = '';
+    if(!file.name.toLowerCase().endsWith('.pdf')){
+      uploadError.textContent = 'Only PDF files are supported.';
+      return;
+    }
+    const base = backendUrl.value.trim().replace(/\/$/, '');
+    localStorage.setItem('rsvp_backend', base);
+    uploadError.textContent = 'Extracting text…';
+
+    const form = new FormData();
+    form.append('file', file);
+
+    try{
+      const res = await fetch(base + '/api/upload', { method: 'POST', body: form });
+      const data = await res.json();
+      if(!res.ok){
+        uploadError.textContent = data.error || 'Upload failed.';
+        return;
+      }
+      words = data.words;
+      uploadError.textContent = '';
+      startReading(data.filename);
+    }catch(err){
+      uploadError.textContent = 'Could not reach backend at ' + base + '. Is app.py running?';
+    }
+  }
+
+  // ---------------- reader screen ----------------
+  function startReading(label){
+    idx = 0;
+    fname.textContent = label;
+    seek.max = Math.max(words.length - 1, 0);
+    uploadScreen.classList.add('hidden');
+    readerScreen.classList.add('active');
+    renderWord();
+    updateProgress();
+    // Land paused - the person presses play (button or Space) when ready.
+    playing = false;
+    playBtn.innerHTML = '&#9654;';
+    showControls();
+  }
+
+  function renderWord(){
+    if(!words.length) return;
+    const w = words[idx];
+    const o = Math.min(w.orp, w.text.length - 1);
+    pre.textContent = w.text.slice(0, o);
+    orpEl.textContent = w.text[o] || '';
+    post.textContent = w.text.slice(o + 1);
+  }
+
+  function updateProgress(){
+    seek.value = idx;
+    posLabel.textContent = (idx + 1) + ' / ' + words.length;
+    const remaining = words.length - idx;
+    const secsLeft = Math.round(remaining * (60 / wpm));
+    const m = Math.floor(secsLeft / 60), s = secsLeft % 60;
+    timeLabel.textContent = m + ':' + String(s).padStart(2, '0') + ' left';
+  }
+
+  function scheduleNext(){
+    if(!playing) return;
+    if(idx >= words.length - 1){ pause(); return; }
+    const w = words[idx];
+    const base = 60000 / wpm;
+    const delay = base * (w.pause || 1);
+    timer = setTimeout(() => {
+      idx++;
+      renderWord();
+      updateProgress();
+      scheduleNext();
+    }, delay);
+  }
+
+  function play(){
+    if(!words.length) return;
+    playing = true;
+    playBtn.innerHTML = '&#10074;&#10074;';
+    scheduleNext();
+    armAutoHide();
+  }
+  function pause(){
+    playing = false;
+    playBtn.innerHTML = '&#9654;';
+    clearTimeout(timer);
+    showControls();
+  }
+  function togglePlay(){ playing ? pause() : play(); }
+
+  function jump(delta){
+    idx = Math.max(0, Math.min(words.length - 1, idx + delta));
+    renderWord();
+    updateProgress();
+  }
+
+  // Converts a duration in seconds to a word count at the current wpm,
+  // so "10 seconds back/forward" actually means 10 seconds of reading
+  // time rather than a fixed word count.
+  function jumpSeconds(seconds){
+    const deltaWords = Math.max(1, Math.round(Math.abs(seconds) * wpm / 60));
+    jump(seconds < 0 ? -deltaWords : deltaWords);
+  }
+
+  function setWpm(v){
+    wpm = Math.max(150, Math.min(900, v));
+    speedSlider.value = wpm;
+    speedLabel.textContent = wpm;
+    wpmTag.textContent = wpm + ' wpm';
+    localStorage.setItem('rsvp_wpm', wpm);
+    if(playing){ clearTimeout(timer); scheduleNext(); }
+  }
+
+  // ---------------- controls auto-hide ----------------
+  // The corner "wpm" tag and the control bar share the same bottom-right
+  // corner, so only one is ever shown at a time: the tag during clean
+  // reading, the full bar whenever it's visible.
+  function showControls(){
+    controls.classList.remove('faded');
+    wpmTag.classList.add('dim');
+    clearTimeout(hideTimer);
+    if(playing) armAutoHide();
+  }
+  function armAutoHide(){
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      controls.classList.add('faded');
+      wpmTag.classList.remove('dim');
+    }, 2200);
+  }
+
+  readerScreen.addEventListener('mousemove', showControls);
+  readerScreen.addEventListener('click', showControls);
+
+  // ---------------- control bindings ----------------
+  // Buttons are blurred right after use so a focused button never
+  // intercepts the Space key (browsers "click" a focused button on
+  // Space by default, which would otherwise double-toggle play/pause).
+  playBtn.addEventListener('click', () => { togglePlay(); playBtn.blur(); });
+  restartBtn.addEventListener('click', () => { idx = 0; renderWord(); updateProgress(); restartBtn.blur(); });
+  backBtn.addEventListener('click', () => { jumpSeconds(-10); backBtn.blur(); });
+  fwdBtn.addEventListener('click', () => { jumpSeconds(10); fwdBtn.blur(); });
+  seek.addEventListener('input', () => { idx = parseInt(seek.value, 10); renderWord(); updateProgress(); });
+  speedSlider.addEventListener('input', () => setWpm(parseInt(speedSlider.value, 10)));
+  newFileBtn.addEventListener('click', () => {
+    pause();
+    readerScreen.classList.remove('active');
+    uploadScreen.classList.remove('hidden');
+    newFileBtn.blur();
+  });
+
+  document.addEventListener('keydown', e => {
+    if(!readerScreen.classList.contains('active')) return;
+    if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    switch(e.key){
+      case ' ': e.preventDefault(); togglePlay(); showControls(); break;
+      case 'ArrowUp': e.preventDefault(); setWpm(wpm + 50); showControls(); break;
+      case 'ArrowDown': e.preventDefault(); setWpm(wpm - 50); showControls(); break;
+      case 'ArrowLeft': e.preventDefault(); jumpSeconds(-10); showControls(); break;
+      case 'ArrowRight': e.preventDefault(); jumpSeconds(10); showControls(); break;
+      case 'r': case 'R': idx = 0; renderWord(); updateProgress(); break;
+      case 'Escape': showControls(); break;
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
