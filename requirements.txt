@@ -1,4 +1,10 @@
-flask
-flask-cors
-pypdf
+# Pinned to the versions this was built and verified against.
+#
+# pypdf is deliberately the pure-Python build: the development machine is
+# Windows on ARM64, where PyMuPDF has no wheel, and pypdf also keeps the
+# dependency list small enough to read.
+Flask==3.1.3
+flask-cors==6.0.5
+pypdf==6.14.2
+
  

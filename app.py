@@ -1,113 +1,472 @@
 """
 RSVP Reader Backend
 ====================
-Flask API that accepts a PDF upload, extracts its text, tokenizes it into
-words, and returns each word annotated with:
 
-  - orp:   character index to highlight red (Optimal Recognition Point)
-  - pause: a multiplier on the base per-word delay, so punctuation
-           (sentence ends, commas) gets a natural extra beat instead of
-           flying past at the same speed as every other word.
+Two things live here.
+
+**The library.** A book is uploaded once, processed once, and then kept on disk
+as a directory under `books/`. Opening it later is a file read, not a PDF parse,
+which is what makes the library screen instant and the reader's progress
+resumable across restarts.
+
+**The single-shot flow.** `POST /api/upload` still takes a PDF and hands back a
+tokenised word list in one response, for a reader that wants nothing stored. It
+shares its tokeniser with the library path, so a book reads identically
+whichever door it came through.
+
+Every word carries:
+
+  - ``text``:  the word itself
+  - ``orp``:   character index to highlight (Optimal Recognition Point)
+  - ``pause``: a multiplier on the base per-word delay, so punctuation gets a
+               natural extra beat instead of flying past at reading speed
 
 Setup:
-    pip install flask flask-cors pypdf
+    pip install -r requirements.txt
     python app.py
     -> serves on http://0.0.0.0:5000
-
-Pair with rsvp_reader.html - open that file directly in a browser and
-point its "Backend URL" field at wherever this is running (localhost,
-or your homelab's LAN IP if you host this on a container/VM instead).
 """
 
+from __future__ import annotations
+
+import json
 import os
-import re
-import string
-from io import BytesIO
+import shutil
+import tempfile
+import time
+from pathlib import Path
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from pypdf import PdfReader
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+import clientbuild
+import detector
+import pdftext
+import tokenizer
+
+BASE_DIR = Path(__file__).resolve().parent
 HTML_FILENAME = "rsvp_reader.html"
+BOOKS_DIR = BASE_DIR / "books"
 
 app = Flask(__name__)
-CORS(app)  # harmless even now that we serve same-origin; keeps file:// usage working too
+CORS(app)  # harmless now that we serve same-origin; keeps file:// usage working too
 
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB upload cap
 
-WORD_RE = re.compile(r"\S+")
-HYPHEN_BREAK_RE = re.compile(r"(\w)-\s*\n\s*(\w)")
-WHITESPACE_RE = re.compile(r"[ \t]+")
+
+# ---------------------------------------------------------------------------
+# On-disk helpers
+# ---------------------------------------------------------------------------
 
 
-def orp_index(word: str) -> int:
+def book_path(book_id: str) -> Path:
     """
-    Optimal Recognition Point: which character index in the word to
-    highlight. Classic Spritz-style heuristic - the eye's natural focal
-    point shifts right as words get longer, but in discrete steps rather
-    than linearly.
+    The directory for a book id, refusing anything that escapes `books/`.
+
+    A book id arrives from the URL, so a value like `../../etc` would otherwise
+    let a request read or delete arbitrary directories. Only the exact shape we
+    generate is accepted.
     """
-    core = word.strip(string.punctuation)
-    length = len(core) if core else len(word)
-
-    if length <= 1:
-        idx = 0
-    elif length <= 5:
-        idx = 1
-    elif length <= 9:
-        idx = 2
-    elif length <= 13:
-        idx = 3
-    else:
-        idx = 4
-
-    leading_punct = len(word) - len(word.lstrip(string.punctuation))
-    idx = min(idx + leading_punct, max(len(word) - 1, 0))
-    return idx
+    if not book_id or not book_id.isalnum() or len(book_id) > 32:
+        raise ValueError("bad book id")
+    return BOOKS_DIR / book_id
 
 
-def pause_multiplier(word: str) -> float:
-    """How much longer than the base per-word delay this word should hold."""
-    multiplier = 1.0
-
-    if word.endswith((".", "!", "?")):
-        multiplier = 2.6
-    elif word.endswith((";", ":")):
-        multiplier = 2.0
-    elif word.endswith((",", ")", "\u201d", '"')):
-        multiplier = 1.5
-
-    core = word.strip(string.punctuation)
-    if len(core) >= 10:
-        multiplier += 0.3
-    if len(core) >= 14:
-        multiplier += 0.3
-
-    return round(multiplier, 2)
+def read_json(path: Path, default=None):
+    """Load a JSON file, returning `default` when it is absent or corrupt."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return default
+    except (OSError, ValueError):
+        return default
 
 
-def extract_text_from_pdf(file_bytes: bytes) -> str:
-    reader = PdfReader(BytesIO(file_bytes))
-    pages_text = [page.extract_text() or "" for page in reader.pages]
-    full_text = "\n".join(pages_text)
-
-    # Rejoin words hyphenated across a line break: "exam-\nple" -> "example"
-    full_text = HYPHEN_BREAK_RE.sub(r"\1\2", full_text)
-    full_text = full_text.replace("\n", " ")
-    full_text = WHITESPACE_RE.sub(" ", full_text)
-    return full_text.strip()
+def write_json(path: Path, payload) -> None:
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
-def tokenize(text: str):
-    return [
-        {
-            "text": m.group(0),
-            "orp": orp_index(m.group(0)),
-            "pause": pause_multiplier(m.group(0)),
+def load_meta(book_id: str) -> dict | None:
+    return read_json(book_path(book_id) / "meta.json")
+
+
+def load_state(book_id: str) -> dict:
+    state = read_json(book_path(book_id) / "state.json")
+    if not isinstance(state, dict):
+        return {
+            "book_id": book_id,
+            "word_index": 0,
+            "section_id": None,
+            "selections": {},
         }
-        for m in WORD_RE.finditer(text)
+    return state
+
+
+def default_selections(meta: dict) -> dict[str, bool]:
+    """The checked/unchecked map a book's own defaults describe."""
+    return {
+        entry["section_id"]: bool(entry.get("default_checked"))
+        for entry in meta.get("stream", [])
+    }
+
+
+def resolve_selections(meta: dict, state: dict) -> dict[str, bool]:
+    """
+    The checked map to actually play back: the book's defaults, with anything
+    the reader has changed laid over the top.
+
+    Merging rather than choosing between the two means a section that appeared
+    after a reprocess is playable straight away, while a saved choice always
+    beats the default it replaced. On-disk selections may also mention sections
+    that are not in the stream - `state.json` records every leaf, including the
+    front and back matter the reader is never offered - so the result is a
+    superset and callers must look up the ids they care about.
+    """
+    return {**default_selections(meta), **(state.get("selections") or {})}
+
+
+def extract_text(pdf_path: Path) -> str:
+    """
+    A PDF's whole text as one prose string, for the single-shot flow.
+
+    This deliberately runs the same extraction the library path uses - read the
+    pages structurally, then normalise - rather than a plain pypdf call. A
+    quick extract would split every drop cap and fuse words across missing
+    spaces, so the same book would read noticeably worse through `/api/upload`
+    than through the library.
+    """
+    pages = pdftext.read_pages(pdftext.open_reader(str(pdf_path)))
+    return detector.normalise_prose(detector.range_text(pages, 1, len(pages)))
+
+
+
+# ---------------------------------------------------------------------------
+# Library
+# ---------------------------------------------------------------------------
+
+
+def summarise(meta: dict, state: dict) -> dict:
+    """
+    A book as the library screen needs it: identity plus reading progress.
+
+    Progress is measured in words against the sections the reader has actually
+    chosen, not against the whole book, so the bar reflects the reading the
+    user set up rather than a total they never agreed to.
+    """
+    selections = resolve_selections(meta, state)
+
+    chosen = [
+        entry
+        for entry in meta.get("stream", [])
+        if selections.get(entry["section_id"], entry.get("default_checked", False))
     ]
+    chosen_words = sum(entry["word_count"] for entry in chosen)
+
+    index = int(state.get("word_index") or 0)
+    index = max(0, index)
+    if chosen_words and index > chosen_words:
+        index = chosen_words
+
+    percent = round(index / chosen_words * 100) if chosen_words else 0
+
+    return {
+        "book_id": meta.get("book_id"),
+        "filename": meta.get("filename"),
+        "created": meta.get("created"),
+        "total_pages": meta.get("total_pages"),
+        "method": meta.get("method"),
+        "confidence": meta.get("confidence"),
+        "total_words": meta.get("total_words"),
+        "readable_count": meta.get("readable_count", len(meta.get("stream", []))),
+        "chosen_count": len(chosen),
+        "chosen_words": chosen_words,
+        "word_index": index,
+        "section_id": state.get("section_id"),
+        "percent": percent,
+        "started": index > 0,
+        "finished": bool(chosen_words) and index >= chosen_words,
+    }
+
+
+@app.route("/api/books", methods=["GET"])
+def list_books():
+    """Every processed book, most recently added first."""
+    BOOKS_DIR.mkdir(parents=True, exist_ok=True)
+
+    books = []
+    for directory in BOOKS_DIR.iterdir():
+        if not directory.is_dir():
+            continue
+        meta = read_json(directory / "meta.json")
+        if not isinstance(meta, dict) or "book_id" not in meta:
+            # An unprocessed PDF or a half-written directory; not a book yet.
+            continue
+        books.append(summarise(meta, load_state(meta["book_id"])))
+
+    books.sort(key=lambda book: book.get("created") or "", reverse=True)
+    return jsonify({"books": books})
+
+
+@app.route("/api/books", methods=["POST"])
+def create_book():
+    """
+    Process an uploaded PDF into a new library book.
+
+    The upload is written to a temporary file first because detection reads the
+    PDF from disk. The book directory is only kept once processing has produced
+    something readable, so a malformed or scanned PDF leaves no half-built book
+    behind.
+    """
+    upload_file = request.files.get("file")
+    if upload_file is None:
+        return jsonify({
+            "error": "No file field in request. Send multipart/form-data with key 'file'."
+        }), 400
+    if not upload_file.filename:
+        return jsonify({"error": "Empty filename."}), 400
+    if not upload_file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Only .pdf files are supported."}), 400
+
+    BOOKS_DIR.mkdir(parents=True, exist_ok=True)
+
+    handle, temp_name = tempfile.mkstemp(suffix=".pdf")
+    os.close(handle)
+    temp_path = Path(temp_name)
+
+    try:
+        upload_file.save(temp_path)
+        book_id = clientbuild.book_id_for(temp_path)
+        meta = clientbuild.build(
+            temp_path,
+            book_dir=BOOKS_DIR / book_id,
+            book_id=book_id,
+            filename=upload_file.filename,
+        )
+    except AssertionError:
+        raise
+    except Exception as exc:  # malformed / encrypted / unreadable PDF
+        return jsonify({"error": f"Could not read this PDF: {exc}"}), 400
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+    if not meta.get("readable_count"):
+        # Structure was found but no text worth reading, which in practice means
+        # the pages are scans. Say so plainly rather than opening an empty reader.
+        shutil.rmtree(BOOKS_DIR / meta["book_id"], ignore_errors=True)
+        return jsonify({
+            "error": "No extractable text found. This PDF is likely scanned "
+                     "images rather than real text, so it would need OCR first."
+        }), 422
+
+    return jsonify({
+        "book": summarise(meta, load_state(meta["book_id"])),
+        "meta": meta,
+    }), 201
+
+
+@app.route("/api/books/<book_id>", methods=["GET"])
+def get_book(book_id: str):
+    """A book's structure, its saved state, and the playback order."""
+    try:
+        meta = load_meta(book_id)
+    except ValueError:
+        return jsonify({"error": "Invalid book id."}), 400
+
+    if meta is None:
+        return jsonify({"error": f"No book {book_id}."}), 404
+
+    state = load_state(book_id)
+    merged = resolve_selections(meta, state)
+    state["selections"] = {entry["section_id"]: merged[entry["section_id"]] for entry in meta.get("stream", [])}
+
+    return jsonify({"book": summarise(meta, state), "meta": meta, "state": state})
+
+
+@app.route("/api/books/<book_id>", methods=["DELETE"])
+def delete_book(book_id: str):
+    """Remove a book and everything stored for it."""
+    try:
+        path = book_path(book_id)
+    except ValueError:
+        return jsonify({"error": "Invalid book id."}), 400
+
+    if not path.exists():
+        return jsonify({"error": f"No book {book_id}."}), 404
+
+    shutil.rmtree(path)
+    return jsonify({"deleted": book_id})
+
+
+# ---------------------------------------------------------------------------
+# Reading
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/books/<book_id>/words", methods=["GET"])
+def get_words(book_id: str):
+    """
+    The whole reading stream for a book, as one payload.
+
+    Playback is continuous across the sections the reader chose, so this
+    concatenates them in document order and records where each begins. The
+    frontend then steps a single index through one flat list and still knows
+    when to raise a chapter title, which is far simpler than stitching
+    per-section fetches together at each boundary and hoping both sides agree.
+
+    Only the checked sections are included, so unchecking a chapter genuinely
+    removes it from what gets read rather than merely hiding it.
+    """
+    try:
+        meta = load_meta(book_id)
+    except ValueError:
+        return jsonify({"error": "Invalid book id."}), 400
+
+    if meta is None:
+        return jsonify({"error": f"No book {book_id}."}), 404
+
+    state = load_state(book_id)
+    selections = resolve_selections(meta, state)
+    book_dir = BOOKS_DIR / book_id
+
+    words: list[dict] = []
+    boundaries: list[dict] = []
+    missing: list[str] = []
+
+    for entry in meta.get("stream", []):
+        section_id = entry["section_id"]
+        if not selections.get(section_id, entry.get("default_checked", False)):
+            continue
+
+        payload = read_json(book_dir / entry["file"])
+        if not isinstance(payload, dict) or not isinstance(payload.get("words"), list):
+            missing.append(section_id)
+            continue
+
+        boundaries.append({
+            "section_id": section_id,
+            "title": entry.get("title"),
+            "full_title": entry.get("full_title"),
+            "entry_type": entry.get("entry_type"),
+            "level": entry.get("level"),
+            "start_index": len(words),
+            "word_count": len(payload["words"]),
+        })
+        words.extend(payload["words"])
+
+    if missing:
+        return jsonify({
+            "error": "This book is missing content for some chapters; "
+                     f"reprocess it to rebuild them ({', '.join(missing[:5])})."
+        }), 409
+
+    return jsonify({
+        "book_id": book_id,
+        "filename": meta.get("filename"),
+        "method": meta.get("method"),
+        "total_words": len(words),
+        "boundaries": boundaries,
+        "words": words,
+    })
+
+
+@app.route("/api/books/<book_id>/state", methods=["GET"])
+def get_state(book_id: str):
+    try:
+        meta = load_meta(book_id)
+    except ValueError:
+        return jsonify({"error": "Invalid book id."}), 400
+    if meta is None:
+        return jsonify({"error": f"No book {book_id}."}), 404
+
+    state = load_state(book_id)
+    if not state.get("selections"):
+        state["selections"] = resolve_selections(meta, state)
+    return jsonify(state)
+
+
+@app.route("/api/books/<book_id>/state", methods=["PUT"])
+def put_state(book_id: str):
+    """
+    Save where the reader is and what they have chosen.
+
+    Called often and from a debounce, so the body is treated as a partial
+    update: a request carrying only `word_index` must not wipe the reader's
+    chapter choices. That is exactly the bug a whole-object overwrite causes
+    when two saves race.
+    """
+    try:
+        meta = load_meta(book_id)
+    except ValueError:
+        return jsonify({"error": "Invalid book id."}), 400
+    if meta is None:
+        return jsonify({"error": f"No book {book_id}."}), 404
+
+    body = request.get_json(silent=True) or {}
+    state = load_state(book_id)
+    state["selections"] = resolve_selections(meta, state)
+
+    if "word_index" in body:
+        try:
+            index = int(body["word_index"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "word_index must be an integer."}), 400
+        state["word_index"] = max(0, index)
+
+    if "section_id" in body:
+        state["section_id"] = body["section_id"]
+
+    if "selections" in body and isinstance(body["selections"], dict):
+        valid = {entry["section_id"] for entry in meta.get("stream", [])}
+        for section_id, checked in body["selections"].items():
+            if section_id in valid:
+                state["selections"][section_id] = bool(checked)
+
+    state["book_id"] = book_id
+    state["updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+
+    write_json(book_path(book_id) / "state.json", state)
+    return jsonify({"book": summarise(meta, state), "state": state})
+
+
+@app.route("/api/books/<book_id>/sections/<section_id>", methods=["PATCH"])
+def patch_section(book_id: str, section_id: str):
+    """
+    Check or uncheck one section.
+
+    Only the selection changes - a section's words are fixed once processed -
+    so this touches `state.json` and never the client payload, and never the
+    PDF. Checking a chapter back on is therefore instant.
+    """
+    try:
+        meta = load_meta(book_id)
+    except ValueError:
+        return jsonify({"error": "Invalid book id."}), 400
+    if meta is None:
+        return jsonify({"error": f"No book {book_id}."}), 404
+
+    valid = {entry["section_id"] for entry in meta.get("stream", [])}
+    if section_id not in valid:
+        return jsonify({"error": f"No readable section {section_id}."}), 404
+
+    body = request.get_json(silent=True) or {}
+    if "checked" not in body:
+        return jsonify({"error": "Send {'checked': true|false}."}), 400
+
+    state = load_state(book_id)
+    state["selections"] = resolve_selections(meta, state)
+    state["selections"][section_id] = bool(body["checked"])
+    state["book_id"] = book_id
+    state["updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+
+    write_json(book_path(book_id) / "state.json", state)
+    return jsonify({"book": summarise(meta, state), "state": state})
+
+
+# ---------------------------------------------------------------------------
+# Standalone single-shot flow (nothing stored)
+# ---------------------------------------------------------------------------
 
 
 @app.route("/", methods=["GET"])
@@ -117,8 +476,8 @@ def index():
     address you need to remember - no separate file:// tab required.
     Requires rsvp_reader.html to sit next to this app.py.
     """
-    html_path = os.path.join(BASE_DIR, HTML_FILENAME)
-    if not os.path.exists(html_path):
+    html_path = BASE_DIR / HTML_FILENAME
+    if not html_path.exists():
         return (
             f"{HTML_FILENAME} not found next to app.py. "
             f"Put both files in the same folder ({BASE_DIR}).",
@@ -134,20 +493,34 @@ def health():
 
 @app.route("/api/upload", methods=["POST"])
 def upload():
-    if "file" not in request.files:
-        return jsonify({"error": "No file field in request. Send multipart/form-data with key 'file'."}), 400
+    """
+    Tokenise a PDF in one request and store nothing.
 
-    f = request.files["file"]
-    if f.filename == "":
+    Kept for the standalone reader and as the fallback when a book does not
+    need to be kept. It shares `tokenizer` with the library path, so the words
+    come out annotated identically either way.
+    """
+    upload_file = request.files.get("file")
+    if upload_file is None:
+        return jsonify({
+            "error": "No file field in request. Send multipart/form-data with key 'file'."
+        }), 400
+    if not upload_file.filename:
         return jsonify({"error": "Empty filename."}), 400
-
-    if not f.filename.lower().endswith(".pdf"):
+    if not upload_file.filename.lower().endswith(".pdf"):
         return jsonify({"error": "Only .pdf files are supported."}), 400
 
+    handle, temp_name = tempfile.mkstemp(suffix=".pdf")
+    os.close(handle)
+    temp_path = Path(temp_name)
+
     try:
-        text = extract_text_from_pdf(f.read())
+        upload_file.save(temp_path)
+        text = extract_text(temp_path)
     except Exception as exc:  # malformed / encrypted / unreadable PDF
         return jsonify({"error": f"Could not read this PDF: {exc}"}), 400
+    finally:
+        temp_path.unlink(missing_ok=True)
 
     if not text:
         return jsonify({
@@ -155,10 +528,9 @@ def upload():
                      "images rather than real text, so it would need OCR first."
         }), 422
 
-    words = tokenize(text)
-
+    words = tokenizer.tokenize(text)
     return jsonify({
-        "filename": f.filename,
+        "filename": upload_file.filename,
         "word_count": len(words),
         "words": words,
     })

@@ -159,6 +159,191 @@
   }
   input[type=range]::-moz-range-thumb{ width:11px; height:11px; border-radius:50%; background:var(--text); border:none; cursor:pointer; }
 
+  /* ---------------- Library & picker screens ---------------- */
+  /* Both are plain document flow rather than the reader's fixed-stage
+     layout, because they hold lists of unknown length. */
+  .scrollScreen{
+    position:absolute; inset:0; display:none;
+    overflow-y:auto; overflow-x:hidden;
+  }
+  .scrollScreen.active{ display:block; }
+  .wrap{
+    width:min(760px,92vw); margin:0 auto;
+    padding:56px 0 72px;
+    font-family: system-ui, sans-serif;
+  }
+  .wrap h1{
+    font-family: Georgia, serif; font-weight:normal;
+    font-size:26px; margin:0 0 4px; color:var(--text);
+  }
+  .wrap .sub{ font-size:13px; color:var(--muted); margin:0 0 28px; }
+  .backLink{
+    background:none; border:none; color:var(--muted); cursor:pointer;
+    font-size:12.5px; padding:0; margin-bottom:22px; text-decoration:underline;
+    font-family: system-ui, sans-serif;
+  }
+  .backLink:hover{ color:var(--text); }
+
+  .empty{
+    border:1px dashed var(--line); border-radius:2px;
+    padding:30px; text-align:center; color:var(--muted); font-size:13.5px;
+  }
+  .empty button{ margin-top:14px; }
+
+  /* Book rows in the library */
+  .bookRow{
+    display:flex; align-items:center; gap:16px;
+    border:1px solid var(--line); border-radius:2px;
+    padding:14px 16px; margin-bottom:10px;
+    transition:border-color .18s;
+  }
+  .bookRow:hover{ border-color:#4a4a4a; }
+  .bookMain{ flex:1; min-width:0; cursor:pointer; }
+  .bookName{
+    color:var(--text); font-size:14.5px; margin-bottom:5px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .bookMeta{ font-size:11.5px; color:var(--muted); display:flex; gap:10px; flex-wrap:wrap; }
+  .bookMeta .done{ color:var(--accent); }
+  .bookBar{
+    height:2px; background:var(--line); margin-top:9px; border-radius:2px;
+    position:relative; overflow:hidden;
+  }
+  .bookBar > i{ position:absolute; left:0; top:0; bottom:0; background:var(--accent); }
+  .bookRow .rowBtns{ display:flex; gap:8px; align-items:center; }
+  .miniBtn{
+    background:none; border:1px solid var(--line); color:var(--text);
+    font-size:12px; padding:6px 12px; border-radius:2px; cursor:pointer;
+    font-family: system-ui, sans-serif; white-space:nowrap;
+  }
+  .miniBtn:hover{ border-color:var(--muted); }
+  .miniBtn.danger:hover{ border-color:var(--accent); color:var(--accent); }
+
+  /* Section tree in the picker */
+  .tree{ margin-bottom:22px; }
+  .node{ border-bottom:1px solid #1a1a1a; }
+  .node:first-child{ border-top:1px solid #1a1a1a; }
+  .nodeRow{
+    display:flex; align-items:flex-start; gap:10px;
+    padding:11px 4px;
+  }
+  .nodeRow.leaf{ cursor:pointer; }
+  .nodeRow.leaf:hover .nodeTitle{ color:#fff; }
+  .nodeRow.disabled{ opacity:.55; }
+  .twist{
+    background:none; border:none; color:var(--muted); cursor:pointer;
+    width:16px; padding:0; flex:none; font-size:10px; line-height:20px;
+    text-align:center;
+  }
+  .twist:hover{ color:var(--text); }
+  .twist.blank{ visibility:hidden; }
+  .nodeBox{
+    flex:none; width:14px; height:14px; margin-top:3px;
+    border:1px solid var(--muted); border-radius:2px; background:none;
+    cursor:pointer; padding:0; position:relative;
+  }
+  .nodeBox.on{ background:var(--accent); border-color:var(--accent); }
+  .nodeBox:disabled{ cursor:default; opacity:.5; }
+  .nodeBox.on::after{
+    content:''; position:absolute; left:4px; top:1px;
+    width:3px; height:7px; border:solid #000; border-width:0 1.5px 1.5px 0;
+    transform:rotate(45deg);
+  }
+  .nodeBox.mid::after{
+    content:''; position:absolute; left:3px; top:5.5px;
+    width:7px; height:1.5px; background:var(--accent);
+  }
+  .nodeBox.mid{ border-color:var(--accent); }
+  .nodeText{ flex:1; min-width:0; }
+  .nodeTitle{
+    color:var(--text); font-size:13.5px; line-height:1.45;
+    transition:color .15s;
+  }
+  .nodeTitle .num{ color:var(--muted); }
+  .nodeStats{
+    font-size:11.5px; color:var(--muted); margin-top:3px;
+    display:flex; gap:9px; align-items:center; flex-wrap:wrap;
+  }
+  .badge{
+    font-size:10px; text-transform:uppercase; letter-spacing:.6px;
+    border:1px solid var(--line); border-radius:2px;
+    padding:1px 5px; color:var(--muted);
+  }
+  .badge.part{ color:#8a8a8a; }
+  .badge.chapter{ color:var(--text); border-color:#3f3f3f; }
+  .badge.sub{ color:var(--muted); }
+  .nodePreview{
+    font-family: Georgia, serif; font-style:italic; font-size:12px;
+    color:#7d7d7d; margin-top:5px; line-height:1.5;
+  }
+  .kids{ margin-left:22px; }
+  .kids.hidden{ display:none; }
+  .nodeRow.pushDown{ background:#131313; }
+
+  /* Sticky footer on the picker */
+  .pickerFoot{
+    position:sticky; bottom:0;
+    background:linear-gradient(to top, rgba(0,0,0,.97) 60%, rgba(0,0,0,0));
+    padding:26px 0 18px; margin-top:8px;
+  }
+  .footInner{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    border-top:1px solid var(--line); padding-top:16px;
+  }
+  .footNote{ font-size:12.5px; color:var(--muted); flex:1; }
+  .footNote b{ color:var(--text); font-weight:normal; }
+  button.primary:disabled{ opacity:.4; cursor:not-allowed; }
+
+  /* Resume / start-over choice, shown only for a book already part-read */
+  .resumeRow{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    border:1px solid var(--line); border-radius:4px;
+    padding:12px 14px; margin:22px 0 6px;
+    background:#101010; font-size:13px; color:var(--muted);
+  }
+  .resumeRow span{ flex:1; }
+  .resumeRow b{ color:var(--text); font-weight:normal; }
+
+  /* ---------------- Chapter title overlay ---------------- */
+  /* Sits above the reader while the RSVP timer stays stopped, so the text
+     underneath is held still rather than continuing out of sync. */
+  #titleOverlay{
+    position:absolute; inset:0; z-index:40;
+    background:#000;
+    display:none; flex-direction:column;
+    align-items:center; justify-content:center;
+    text-align:center; padding:8vw;
+    cursor:pointer;
+    opacity:0; transition:opacity .32s ease;
+  }
+  #titleOverlay.show{ display:flex; }
+  #titleOverlay.visible{ opacity:1; }
+  #titleOverlay .kicker{
+    font-family: system-ui, sans-serif;
+    font-size:12px; text-transform:uppercase; letter-spacing:2.4px;
+    color:var(--accent); margin-bottom:20px;
+  }
+  #titleOverlay .big{
+    font-size:clamp(30px, 5.4vw, 70px);
+    line-height:1.16; color:var(--text); max-width:19ch;
+  }
+  #titleOverlay .big .sub{
+    display:block; font-size:.62em; color:#a9a9a9;
+    margin-top:.34em; font-style:italic;
+  }
+  #titleOverlay .hint{
+    font-family: system-ui, sans-serif;
+    font-size:12px; color:var(--muted); margin-top:38px;
+    letter-spacing:.4px;
+  }
+  #titleOverlay .bar{
+    position:absolute; left:0; bottom:0; height:2px;
+    background:var(--accent); width:0;
+  }
+  @media (prefers-reduced-motion: reduce){
+    #titleOverlay{ transition:none; }
+  }
+
   @media (max-width: 560px){
     .fname{ display:none; }
     .drop{ padding:34px 30px; font-size:16px; }
@@ -193,11 +378,56 @@
       <input type="text" id="backendUrl" value="http://localhost:5000">
     </div>
 
+    <button class="linkBtn" id="openLibraryBtn">Open your library</button>
+
     <div id="uploadError"></div>
+  </div>
+
+  <!-- Library: every book already processed and kept on disk -->
+  <div id="libraryScreen" class="scrollScreen">
+    <div class="wrap">
+      <h1>Library</h1>
+      <p class="sub" id="librarySub">Books you have already added.</p>
+      <div id="bookList"></div>
+      <div class="empty" id="libraryEmpty" style="display:none">
+        No books yet. Add a PDF to process it once and keep it here.
+        <br>
+        <button class="primary" id="libraryAddBtn">Add a book</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Picker: choose which parts of the book to actually read -->
+  <div id="pickerScreen" class="scrollScreen">
+    <div class="wrap">
+      <button class="backLink" id="pickerBack">&#8592; Library</button>
+      <h1 id="pickerTitle">Choose what to read</h1>
+      <p class="sub" id="pickerSub"></p>
+      <div id="resumeRow" class="resumeRow" style="display:none">
+        <span id="resumeNote"></span>
+        <button class="miniBtn" id="resumeBtn">Resume</button>
+        <button class="miniBtn" id="startOverBtn">Start over</button>
+      </div>
+      <div class="tree" id="pickerTree"></div>
+      <div class="pickerFoot">
+        <div class="footInner">
+          <span class="footNote" id="pickerCount"></span>
+          <button class="miniBtn" id="pickAll">Select all</button>
+          <button class="miniBtn" id="pickNone">Select none</button>
+          <button class="primary" id="pickerGo">Start reading</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Reader screen -->
   <div id="readerScreen">
+    <div id="titleOverlay">
+      <div class="kicker" id="overlayKicker"></div>
+      <div class="big" id="overlayTitle"></div>
+      <div class="hint">Space or click to continue</div>
+      <div class="bar" id="overlayBar"></div>
+    </div>
     <div id="stage">
       <div class="tick top"></div>
       <div class="tick bottom"></div>
@@ -284,9 +514,25 @@
   let timer = null;
   let hideTimer = null;
 
+  // Library mode. When `bookId` is set the reader is showing a saved book and
+  // should persist position and honour chapter boundaries; when it is null it
+  // is reading pasted text or a one-shot upload, which has no server-side
+  // identity and therefore nothing to save against.
+  let bookId = null;
+  let resumeIndex = 0;        // saved word index of the book being opened
+  let boundaries = [];        // [{section_id,title,full_title,entry_type,level,start_index,word_count}]
+  let meta = null;            // the book's meta.json, for the picker tree
+  let saveSelections = null;  // {sectionId: bool} as loaded, the picker's working copy
+  let treeNodes = [];         // every playable leaf row, in document order
+  let aggBoxes = [];          // parent rows, whose boxes roll up from their leaves
+  let nextBoundary = 0;       // index into `boundaries` of the next title not yet shown
+  let saveTimer = null;
+
   // ---------------- elements ----------------
   const uploadScreen = document.getElementById('uploadScreen');
   const readerScreen = document.getElementById('readerScreen');
+  const libraryScreen = document.getElementById('libraryScreen');
+  const pickerScreen = document.getElementById('pickerScreen');
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('fileInput');
   const uploadError = document.getElementById('uploadError');
@@ -295,6 +541,30 @@
   const pasteText = document.getElementById('pasteText');
   const pasteGo = document.getElementById('pasteGo');
   const backendUrl = document.getElementById('backendUrl');
+  const openLibraryBtn = document.getElementById('openLibraryBtn');
+
+  const bookList = document.getElementById('bookList');
+  const libraryEmpty = document.getElementById('libraryEmpty');
+  const librarySub = document.getElementById('librarySub');
+  const libraryAddBtn = document.getElementById('libraryAddBtn');
+
+  const pickerTree = document.getElementById('pickerTree');
+  const pickerTitle = document.getElementById('pickerTitle');
+  const pickerSub = document.getElementById('pickerSub');
+  const pickerCount = document.getElementById('pickerCount');
+  const pickerBack = document.getElementById('pickerBack');
+  const pickerGo = document.getElementById('pickerGo');
+  const pickAll = document.getElementById('pickAll');
+  const pickNone = document.getElementById('pickNone');
+  const resumeRow = document.getElementById('resumeRow');
+  const resumeNote = document.getElementById('resumeNote');
+  const resumeBtn = document.getElementById('resumeBtn');
+  const startOverBtn = document.getElementById('startOverBtn');
+
+  const titleOverlay = document.getElementById('titleOverlay');
+  const overlayKicker = document.getElementById('overlayKicker');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayBar = document.getElementById('overlayBar');
 
   const pre = document.getElementById('pre');
   const orpEl = document.getElementById('orp');
@@ -324,7 +594,379 @@
   speedLabel.textContent = wpm;
   wpmTag.textContent = wpm + ' wpm';
 
-  // ---------------- upload screen wiring ----------------
+  // ---------------- screen switching ----------------
+  // One place to hide everything, so no screen can ever be left showing
+  // behind another after a failure partway through a transition.
+  function showScreen(name){
+    uploadScreen.classList.toggle('hidden', name !== 'upload');
+    libraryScreen.classList.toggle('active', name === 'library');
+    pickerScreen.classList.toggle('active', name === 'picker');
+    readerScreen.classList.toggle('active', name === 'reader');
+  }
+  function api(path){
+    return backendUrl.value.trim().replace(/\/$/, '') + path;
+  }
+
+  // ---------------- library ----------------
+  async function loadLibrary(){
+    showScreen('library');
+    bookList.innerHTML = '';
+    librarySub.textContent = 'Books you have already added.';
+    try{
+      const res = await fetch(api('/api/books'));
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error || 'Could not list books.');
+      renderLibrary(data.books || []);
+    }catch(err){
+      librarySub.textContent = 'Could not reach the backend. Is app.py running?';
+      renderLibrary([]);
+    }
+  }
+
+  function renderLibrary(books){
+    if(!books.length){
+      libraryEmpty.style.display = '';
+      return;
+    }
+    libraryEmpty.style.display = 'none';
+    for(const b of books) bookList.appendChild(bookRow(b));
+  }
+
+  function bookRow(b){
+    const row = document.createElement('div');
+    row.className = 'bookRow';
+
+    const main = document.createElement('div');
+    main.className = 'bookMain';
+
+    const name = document.createElement('div');
+    name.className = 'bookName';
+    name.textContent = b.filename || b.book_id;
+    name.title = name.textContent;
+
+    const bits = [];
+    bits.push(b.chosen_words.toLocaleString() + ' words');
+    bits.push(b.chosen_count + ' section' + (b.chosen_count === 1 ? '' : 's'));
+    if(b.method) bits.push(b.method);
+    const metaLine = document.createElement('div');
+    metaLine.className = 'bookMeta';
+    for(const text of bits){
+      const span = document.createElement('span');
+      span.textContent = text;
+      metaLine.appendChild(span);
+    }
+    const state = document.createElement('span');
+    if(b.finished){
+      state.className = 'done';
+      state.textContent = 'Finished';
+    }else if(b.started){
+      state.textContent = b.percent + '%';
+    }else{
+      state.textContent = 'Not started';
+    }
+    metaLine.appendChild(state);
+
+    const bar = document.createElement('div');
+    bar.className = 'bookBar';
+    const fill = document.createElement('i');
+    fill.style.width = Math.min(100, b.percent) + '%';
+    bar.appendChild(fill);
+
+    main.append(name, metaLine, bar);
+    main.addEventListener('click', () => openBook(b.book_id));
+
+    const btns = document.createElement('div');
+    btns.className = 'rowBtns';
+
+    const go = document.createElement('button');
+    go.className = 'miniBtn';
+    go.textContent = b.started && !b.finished ? 'Resume' : 'Open';
+    go.addEventListener('click', () => openBook(b.book_id));
+
+    const del = document.createElement('button');
+    del.className = 'miniBtn danger';
+    del.textContent = 'Delete';
+    del.addEventListener('click', () => removeBook(b, row));
+
+    btns.append(go, del);
+    row.append(main, btns);
+    return row;
+  }
+
+  // Deleting is the one action here that destroys work, so it asks first and
+  // names the file, which makes an accidental click on the wrong row obvious
+  // before anything is lost.
+  async function removeBook(b, row){
+    const label = b.filename || b.book_id;
+    if(!confirm('Delete "' + label + '"?\n\nThe processed text and your saved position are removed. The original PDF is not kept by this app.')) return;
+    try{
+      const res = await fetch(api('/api/books/' + encodeURIComponent(b.book_id)), { method: 'DELETE' });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error || 'Delete failed.');
+      row.remove();
+      if(!bookList.children.length) libraryEmpty.style.display = '';
+    }catch(err){
+      alert(err.message);
+    }
+  }
+
+  // ---------------- picker ----------------
+  async function openBook(id){
+    try{
+      const res = await fetch(api('/api/books/' + encodeURIComponent(id)));
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error || 'Could not open this book.');
+      bookId = id;
+      meta = data.meta;
+      saveSelections = Object.assign({}, data.state.selections || {});
+      resumeIndex = data.book.word_index || 0;
+      // Offer the choice rather than guessing: a part-read book could be either
+      // one being continued or one being reread, and only the reader knows.
+      // `started` excludes a book sitting at word 0 with nothing read yet.
+      if(data.book.started && !data.book.finished && resumeIndex > 0){
+        resumeNote.innerHTML = 'You stopped <b>' + data.book.percent + '%</b> in, at word <b>' +
+          resumeIndex.toLocaleString() + '</b> of ' + data.book.chosen_words.toLocaleString() + '.';
+        resumeRow.style.display = '';
+      }else{
+        resumeRow.style.display = 'none';
+      }
+      renderPicker(data.book);
+      showScreen('picker');
+    }catch(err){
+      alert(err.message);
+    }
+  }
+
+  function renderPicker(book){
+    pickerTitle.textContent = book.filename || book.book_id;
+    pickerSub.textContent =
+      book.readable_count + ' readable sections across ' + book.total_pages + ' pages' +
+      (book.method ? '  ·  structure found via ' + book.method : '');
+
+    pickerTree.innerHTML = '';
+    treeNodes = [];
+    aggBoxes = [];
+    for(const node of meta.sections) pickerTree.appendChild(buildNode(node));
+    refreshPicker();
+  }
+
+  // Whether the backend will accept a selection change for this section. The
+  // server publishes the set of playable sections in its selections map, and
+  // its PATCH rejects anything outside it, so a row it does not include is
+  // shown for orientation only and is not made clickable.
+  function isOffered(id){
+    return !!saveSelections && Object.prototype.hasOwnProperty.call(saveSelections, id);
+  }
+
+  // A node is a checkbox row plus an optional nested block of children. Only
+  // leaves carry words, so only leaves are individually playable; a parent's
+  // box is a convenience that sets all of its descendants at once.
+  function buildNode(node){
+    const wrap = document.createElement('div');
+
+    const row = document.createElement('div');
+    row.className = 'node';
+
+    const hasKids = !!(node.children && node.children.length);
+    const isLeaf = !hasKids && node.word_count > 0;
+    const playable = isLeaf && isOffered(node.id);
+
+    const line = document.createElement('div');
+    line.className = 'nodeRow' + (playable ? ' leaf' : '') + (playable || hasKids ? '' : ' disabled');
+
+    const twist = document.createElement('button');
+    twist.className = 'twist' + (hasKids ? '' : ' blank');
+    twist.textContent = '\u25BC';
+    twist.setAttribute('aria-label', 'Collapse');
+    line.appendChild(twist);
+
+    const box = document.createElement('button');
+    box.className = 'nodeBox';
+    box.setAttribute('role', 'checkbox');
+    box.setAttribute('aria-label', node.title);
+    line.appendChild(box);
+
+    const text = document.createElement('div');
+    text.className = 'nodeText';
+
+    const title = document.createElement('div');
+    title.className = 'nodeTitle';
+    title.textContent = node.title;
+
+    const stats = document.createElement('div');
+    stats.className = 'nodeStats';
+    const badge = document.createElement('span');
+    badge.className = 'badge ' + node.entry_type;
+    badge.textContent = node.entry_type === 'front' ? 'Front matter'
+                      : node.entry_type === 'back' ? 'Back matter'
+                      : node.entry_type;
+    stats.appendChild(badge);
+    if(node.word_count > 0){
+      const wc = document.createElement('span');
+      wc.textContent = node.word_count.toLocaleString() + ' words';
+      stats.appendChild(wc);
+    }else{
+      const wc = document.createElement('span');
+      wc.textContent = 'no body text';
+      stats.appendChild(wc);
+    }
+
+    text.append(title, stats);
+
+    // The preview is the whole point of showing a leaf at all: it lets the
+    // reader tell a real chapter from a stray heading without opening it.
+    if(isLeaf && node.preview){
+      const prev = document.createElement('div');
+      prev.className = 'nodePreview';
+      prev.textContent = '\u201c' + node.preview.trim() + '\u2026\u201d';
+      text.appendChild(prev);
+    }
+
+    line.appendChild(text);
+
+    let kidBlock = null;
+    if(hasKids){
+      kidBlock = document.createElement('div');
+      kidBlock.className = 'kids';
+      for(const child of node.children) kidBlock.appendChild(buildNode(child));
+    }
+
+    row.appendChild(line);
+    wrap.appendChild(row);
+    if(kidBlock) wrap.appendChild(kidBlock);
+
+    // Only playable leaves are recorded, because only they are ever saved or
+    // played; the rest are shown so the book's structure is legible.
+    const record = playable ? {
+      id: node.id, row: line, box: box, wrap: wrap, kids: kidBlock,
+      wordCount: node.word_count
+    } : null;
+
+    if(hasKids){
+      twist.addEventListener('click', e => {
+        e.stopPropagation();
+        const hidden = kidBlock.classList.toggle('hidden');
+        twist.textContent = hidden ? '\u25B6' : '\u25BC';
+        twist.setAttribute('aria-label', hidden ? 'Expand' : 'Collapse');
+      });
+    }
+
+    // Non-playable leaves get no box behaviour at all, so clicking one cannot
+    // put the picker and the server out of step. Rows with children are left
+    // alone here because their box is set up as an aggregate below.
+    if(!playable && !hasKids){
+      box.disabled = true;
+      box.setAttribute('aria-disabled', 'true');
+    }
+    if(record){
+      treeNodes.push(record);
+      line.addEventListener('click', e => {
+        if(e.target === box) return;
+        toggleLeaf(record, !saveSelections[record.id]);
+      });
+      box.addEventListener('click', e => {
+        e.stopPropagation();
+        toggleLeaf(record, !saveSelections[record.id]);
+      });
+    }
+
+    // Every non-leaf row gets an aggregate box, but it is derived from the
+    // leaves beneath rather than stored, so the two can never disagree. Only
+    // offered leaves are collected, so a parent never claims to control a
+    // child the server would refuse.
+    if(hasKids){
+      const agg = { node: node, box: box, leaves: [] };
+      aggLeaves(agg);
+      if(!agg.leaves.length){
+        box.disabled = true;
+        box.setAttribute('aria-disabled', 'true');
+      }
+      box.addEventListener('click', e => {
+        e.stopPropagation();
+        const target = agg.leaves.some(id => !saveSelections[id]);
+        for(const id of agg.leaves) saveSelections[id] = target;
+        refreshPicker();
+      });
+      aggBoxes.push(agg);
+    }
+
+    return wrap;
+  }
+
+  // Collected from the meta node the row was built from, not by walking the
+  // DOM: the same subtree is already described there, and reading it back out
+  // of markup would be slower and easier to get subtly wrong.
+  function aggLeaves(agg){
+    collectLeafIds(agg.node, agg.leaves);
+  }
+  function collectLeafIds(node, out){
+    if(node.children && node.children.length){
+      for(const child of node.children) collectLeafIds(child, out);
+    }else if(node.word_count > 0 && isOffered(node.id)){
+      out.push(node.id);
+    }
+  }
+
+  function toggleLeaf(record, on){
+    saveSelections[record.id] = !!on;
+    refreshPicker();
+  }
+
+  // Recomputed from the saved map every time, so the DOM never becomes the
+  // source of truth for what is selected.
+  function refreshPicker(){
+    let words = 0, count = 0;
+    for(const rec of treeNodes){
+      const on = !!saveSelections[rec.id];
+      rec.box.classList.toggle('on', on);
+      rec.box.classList.remove('mid');
+      rec.box.setAttribute('aria-checked', on ? 'true' : 'false');
+      if(on){ words += rec.wordCount; count++; }
+    }
+
+    for(const agg of aggBoxes){
+      const on = agg.leaves.filter(id => saveSelections[id]).length;
+      agg.box.classList.toggle('on', on > 0 && on === agg.leaves.length);
+      agg.box.classList.toggle('mid', on > 0 && on < agg.leaves.length);
+      agg.box.setAttribute('aria-checked', on === 0 ? 'false' : on === agg.leaves.length ? 'true' : 'mixed');
+    }
+
+    if(count){
+      const mins = Math.round(words / wpm);
+      const h = Math.floor(mins / 60), m = mins % 60;
+      pickerCount.innerHTML = '<b>' + count + '</b> of ' + treeNodes.length +
+        ' sections  ·  <b>' + words.toLocaleString() + '</b> words  ·  about <b>' +
+        (h ? h + 'h ' : '') + m + 'm</b> at ' + wpm + ' wpm';
+    }else{
+      pickerCount.textContent = 'Nothing selected yet.';
+    }
+    pickerGo.disabled = count === 0;
+  }
+
+  // ---------------- library & picker wiring ----------------
+  libraryAddBtn.addEventListener('click', () => showScreen('upload'));
+  openLibraryBtn.addEventListener('click', () => {
+    backendUrl.value = backendUrl.value.trim().replace(/\/$/, '');
+    localStorage.setItem('rsvp_backend', backendUrl.value);
+    loadLibrary();
+  });
+  pickerBack.addEventListener('click', () => { loadLibrary(); });
+  pickAll.addEventListener('click', () => {
+    for(const rec of treeNodes) saveSelections[rec.id] = true;
+    refreshPicker();
+  });
+  pickNone.addEventListener('click', () => {
+    for(const rec of treeNodes) saveSelections[rec.id] = false;
+    refreshPicker();
+  });
+
+  pickerGo.addEventListener('click', () => startBook());
+
+  // Resume uses the saved index that openBook already read; Start over sets it
+  // to zero and lets startBook's normal path run, so there is only one code
+  // path into the reader and the position is persisted as the reader advances.
+  resumeBtn.addEventListener('click', () => { startBook(); });
+  startOverBtn.addEventListener('click', () => { resumeIndex = 0; startBook(); });
   dropZone.addEventListener('click', () => fileInput.click());
   dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
@@ -339,9 +981,12 @@
     const t = pasteText.value.trim();
     if(!t){ uploadError.textContent = 'Paste some text first.'; return; }
     words = tokenize(t);
-    startReading('Pasted text');
+    startReading('Pasted text', true);
   });
 
+  // A dropped PDF is added to the library rather than read straight away: it
+  // has to be processed once, and going through the picker means the reader
+  // chooses what to read instead of the app guessing.
   async function handleFile(file){
     uploadError.textContent = '';
     if(!file.name.toLowerCase().endsWith('.pdf')){
@@ -350,39 +995,92 @@
     }
     const base = backendUrl.value.trim().replace(/\/$/, '');
     localStorage.setItem('rsvp_backend', base);
-    uploadError.textContent = 'Extracting text…';
+    uploadError.textContent = 'Reading the PDF and finding its structure\u2026';
 
     const form = new FormData();
     form.append('file', file);
 
     try{
-      const res = await fetch(base + '/api/upload', { method: 'POST', body: form });
+      const res = await fetch(base + '/api/books', { method: 'POST', body: form });
       const data = await res.json();
       if(!res.ok){
+        // 422 carries the OCR explanation for a PDF with no extractable text.
         uploadError.textContent = data.error || 'Upload failed.';
         return;
       }
-      words = data.words;
       uploadError.textContent = '';
-      startReading(data.filename);
+      await openBook(data.book.book_id);
     }catch(err){
       uploadError.textContent = 'Could not reach backend at ' + base + '. Is app.py running?';
     }
   }
 
   // ---------------- reader screen ----------------
-  function startReading(label){
-    idx = 0;
+  // Pasted text is the only single-shot source: it has no server-side identity,
+  // so there is nothing to persist and no boundaries to announce. A library
+  // book goes through startBook instead, which restores the saved position and
+  // the section titles.
+  function startReading(label, singleShot){
+    if(singleShot){ bookId = null; boundaries = []; meta = null; }
     fname.textContent = label;
     seek.max = Math.max(words.length - 1, 0);
-    uploadScreen.classList.add('hidden');
-    readerScreen.classList.add('active');
+    showScreen('reader');
     renderWord();
     updateProgress();
     // Land paused - the person presses play (button or Space) when ready.
     playing = false;
     playBtn.innerHTML = '&#9654;';
     showControls();
+  }
+
+  // Opening a saved book: fetch the chosen sections' words plus the saved
+  // position, then land exactly where the reader left off.
+  async function startBook(){
+    pickerGo.disabled = true;
+    pickerGo.textContent = 'Loading\u2026';
+    try{
+      // Persist the picker's choices before loading, so the server concatenates
+      // the same sections the reader is looking at. The server's PUT /state is a
+      // merge, so sending selections alone leaves any saved position intact.
+      const put = await fetch(api('/api/books/' + encodeURIComponent(bookId) + '/state'), {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ selections: saveSelections })
+      });
+      if(!put.ok){
+        const bad = await put.json().catch(() => ({}));
+        throw new Error(bad.error || 'Could not save your section choices.');
+      }
+
+      const res = await fetch(api('/api/books/' + encodeURIComponent(bookId) + '/words'));
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error || 'Could not load this book.');
+
+      words = data.words;
+      boundaries = data.boundaries || [];
+      fname.textContent = data.filename || 'Book';
+      seek.max = Math.max(words.length - 1, 0);
+      showScreen('reader');
+
+      const saved = parseInt(resumeIndex, 10);
+      idx = Number.isFinite(saved) ? Math.max(0, Math.min(words.length - 1, saved)) : 0;
+      // Point at the first title at or after the resumed word, so a fresh book
+      // announces its opening chapter but a resumed book does not re-announce
+      // the ones already read through. Landing exactly on a boundary counts as
+      // "not yet announced", since that word has not been shown yet.
+      syncBoundaryPointer();
+
+      renderWord();
+      updateProgress();
+      playing = false;
+      playBtn.innerHTML = '&#9654;';
+      showControls();
+    }catch(err){
+      alert(err.message);
+    }finally{
+      pickerGo.disabled = false;
+      pickerGo.textContent = 'Start reading';
+    }
   }
 
   function renderWord(){
@@ -394,6 +1092,15 @@
     post.textContent = w.text.slice(o + 1);
   }
 
+  // Which section the current word falls in, for the meta line and for saving.
+  function sectionAt(i){
+    let found = null;
+    for(const b of boundaries){
+      if(b.start_index <= i) found = b; else break;
+    }
+    return found;
+  }
+
   function updateProgress(){
     seek.value = idx;
     posLabel.textContent = (idx + 1) + ' / ' + words.length;
@@ -401,11 +1108,120 @@
     const secsLeft = Math.round(remaining * (60 / wpm));
     const m = Math.floor(secsLeft / 60), s = secsLeft % 60;
     timeLabel.textContent = m + ':' + String(s).padStart(2, '0') + ' left';
+    if(boundaries.length){
+      const here = sectionAt(idx);
+      if(here) fname.textContent = here.full_title || here.title;
+    }
+  }
+
+  // ---------------- chapter title overlay ----------------
+  // Playback is paused outright while a title is up, not merely covered: the
+  // words underneath must not advance behind a full-screen panel, or the
+  // reader would lose their place by the exact dwell time.
+  function dwellFor(text){
+    return Math.max(1200, Math.min(320 + 55 * (text || '').length, 4500));
+  }
+
+  function showTitle(boundary, done){
+    const full = (boundary.full_title || boundary.title || '').trim();
+    const title = (boundary.title || full).trim();
+    const isSub = boundary.level > 1 || boundary.entry_type === 'sub';
+
+    // full_title is the book's own label and may carry more than the printed
+    // heading: "1 The Surprising Power of Atomic Habits" prefixes a chapter
+    // number, while other entries append a real subtitle. Splitting on the
+    // heading tells the two apart, so a number is never shown as if it were a
+    // subtitle hanging under the title.
+    let lead = '', sub = '';
+    const at = title ? full.indexOf(title) : -1;
+    if(at > 0){
+      lead = full.slice(0, at).replace(/[\s\u2014\u2013:\u00b7-]+$/, '').trim();
+      sub = full.slice(at + title.length).replace(/^[\s\u2014\u2013:\u00b7-]+/, '').trim();
+    }else if(at === -1 && full !== title){
+      sub = full;
+    }
+
+    const kind = isSub ? 'Section' : 'Chapter';
+    overlayKicker.textContent = lead ? kind + ' ' + lead : kind;
+    overlayTitle.innerHTML = '';
+    overlayTitle.appendChild(document.createTextNode(title));
+
+    if(sub){
+      const span = document.createElement('span');
+      span.className = 'sub';
+      span.textContent = sub;
+      overlayTitle.appendChild(span);
+    }
+
+    titleOverlay.classList.add('show');
+    overlayBar.style.transition = 'none';
+    overlayBar.style.width = '0';
+    // Force a reflow so the browser starts the transition from zero rather
+    // than coalescing both style changes and skipping the animation.
+    void overlayBar.offsetWidth;
+
+    // Dwell on everything that will be on screen, so a long chapter title with
+    // a subtitle is not dismissed before it can be read.
+    const dwell = dwellFor(title + ' ' + sub);
+    const start = performance.now();
+    let finished = false;
+
+    function finish(){
+      if(finished) return;
+      finished = true;
+      clearTimeout(dwellTimer);
+      clearInterval(barTimer);
+      titleOverlay.classList.remove('visible');
+      setTimeout(() => titleOverlay.classList.remove('show'), 320);
+      overlayBar.style.transition = 'none';
+      titleOverlay.removeEventListener('click', finish);
+      document.removeEventListener('keydown', onKey, true);
+      done();
+    }
+    function onKey(e){
+      if(e.key === ' ' || e.key === 'Escape' || e.key === 'Enter'){
+        e.preventDefault();
+        e.stopPropagation();
+        finish();
+      }
+    }
+
+    requestAnimationFrame(() => {
+      titleOverlay.classList.add('visible');
+      overlayBar.style.transition = 'width ' + dwell + 'ms linear';
+      overlayBar.style.width = '100%';
+    });
+    const dwellTimer = setTimeout(finish, dwell);
+    const barTimer = setInterval(() => {
+      if(performance.now() - start > dwell + 500) finish();
+    }, 250);
+
+    titleOverlay.addEventListener('click', finish);
+    document.addEventListener('keydown', onKey, true);
   }
 
   function scheduleNext(){
     if(!playing) return;
-    if(idx >= words.length - 1){ pause(); return; }
+    if(idx >= words.length - 1){ finishBook(); return; }
+
+    // A title is due at this index: stop, show it, then carry on from the same
+    // word so the section's first word is what the reader sees next.
+    const due = boundaries[nextBoundary];
+    if(due && due.start_index === idx){
+      nextBoundary++;
+      playing = false;
+      clearTimeout(timer);
+      showControls();
+      showTitle(due, () => {
+        playing = true;
+        playBtn.innerHTML = '&#10074;&#10074;';
+        renderWord();
+        scheduleNext();
+      });
+      return;
+    }
+    if(due && due.start_index < idx) nextBoundary++;
+
     const w = words[idx];
     const base = 60000 / wpm;
     const delay = base * (w.pause || 1);
@@ -413,8 +1229,42 @@
       idx++;
       renderWord();
       updateProgress();
+      scheduleSave();
       scheduleNext();
     }, delay);
+  }
+
+  function finishBook(){
+    pause();
+    savePosition();
+    showControls();
+  }
+
+  // ---------------- position saving ----------------
+  // Debounced because playback writes on every boundary and roughly every few
+  // seconds; sending each one would mean hundreds of requests per chapter.
+  function scheduleSave(){
+    if(!bookId) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(savePosition, 2500);
+  }
+
+  async function savePosition(){
+    if(!bookId) return;
+    clearTimeout(saveTimer);
+    const here = sectionAt(idx);
+    try{
+      await fetch(api('/api/books/' + encodeURIComponent(bookId) + '/state'), {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        // Deliberately only these two fields: the server merges, so omitting
+        // `selections` must not be read as "clear them".
+        body: JSON.stringify({ word_index: idx, section_id: here ? here.section_id : null })
+      });
+    }catch(err){
+      // A failed save is not worth interrupting reading for; the next one will
+      // carry the same position anyway.
+    }
   }
 
   function play(){
@@ -434,8 +1284,17 @@
 
   function jump(delta){
     idx = Math.max(0, Math.min(words.length - 1, idx + delta));
+    syncBoundaryPointer();
     renderWord();
     updateProgress();
+  }
+
+  // A seek moves the word pointer discontinuously, so the title cursor has to
+  // be re-pointed by hand: the walk in scheduleNext only ever steps one
+  // boundary per word, which would leave every skipped title unannounced.
+  function syncBoundaryPointer(){
+    nextBoundary = boundaries.findIndex(b => b.start_index >= idx);
+    if(nextBoundary === -1) nextBoundary = boundaries.length;
   }
 
   // Converts a duration in seconds to a word count at the current wpm,
@@ -481,15 +1340,17 @@
   // intercepts the Space key (browsers "click" a focused button on
   // Space by default, which would otherwise double-toggle play/pause).
   playBtn.addEventListener('click', () => { togglePlay(); playBtn.blur(); });
-  restartBtn.addEventListener('click', () => { idx = 0; renderWord(); updateProgress(); restartBtn.blur(); });
+  restartBtn.addEventListener('click', () => { idx = 0; syncBoundaryPointer(); renderWord(); updateProgress(); restartBtn.blur(); });
   backBtn.addEventListener('click', () => { jumpSeconds(-10); backBtn.blur(); });
   fwdBtn.addEventListener('click', () => { jumpSeconds(10); fwdBtn.blur(); });
-  seek.addEventListener('input', () => { idx = parseInt(seek.value, 10); renderWord(); updateProgress(); });
+  seek.addEventListener('input', () => { idx = parseInt(seek.value, 10); syncBoundaryPointer(); renderWord(); updateProgress(); });
   speedSlider.addEventListener('input', () => setWpm(parseInt(speedSlider.value, 10)));
   newFileBtn.addEventListener('click', () => {
     pause();
-    readerScreen.classList.remove('active');
-    uploadScreen.classList.remove('hidden');
+    // Flush the position before leaving, otherwise the last few seconds of
+    // reading are lost to the debounce. loadLibrary switches screens.
+    savePosition();
+    loadLibrary();
     newFileBtn.blur();
   });
 
@@ -502,10 +1363,19 @@
       case 'ArrowDown': e.preventDefault(); setWpm(wpm - 50); showControls(); break;
       case 'ArrowLeft': e.preventDefault(); jumpSeconds(-10); showControls(); break;
       case 'ArrowRight': e.preventDefault(); jumpSeconds(10); showControls(); break;
-      case 'r': case 'R': idx = 0; renderWord(); updateProgress(); break;
+      case 'r': case 'R': idx = 0; syncBoundaryPointer(); renderWord(); updateProgress(); break;
       case 'Escape': showControls(); break;
     }
   });
+
+  // ---------------- startup ----------------
+  // The library is home, but pasted text works with no backend at all, so a
+  // failed first listing falls back to the upload screen instead of showing a
+  // dead end. loadLibrary already reports the failure in its subtitle.
+  (async function boot(){
+    await loadLibrary();
+    if(librarySub.textContent.indexOf('Could not reach') !== -1) showScreen('upload');
+  })();
 
 })();
 </script>

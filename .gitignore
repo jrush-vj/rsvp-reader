@@ -1,2 +1,11 @@
 .venv/
 .vscode/
+/books
+/backups
+__pycache__/
+.gitignore
+
+# Working files, not part of the app: scratch PDFs used for upload tests, and the
+# script body that check_reader_js.py extracts out of the HTML on every run.
+/tmp/
+scripts/_reader_script.js
