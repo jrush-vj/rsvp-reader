@@ -1,0 +1,198 @@
+/* ==========================================================================
+   BookTube — design tokens
+   --------------------------------------------------------------------------
+   Dark mode only, by design.
+
+   The ground is true AMOLED black — `#000`, not a near-black — with a ladder of
+   neutral greys above it. Nothing in the background is tinted: on an OLED panel
+   an off-black reads as a slightly-lit grey haze rather than as black, which
+   costs both the contrast and the battery saving that black is there for.
+
+   Colour is therefore carried entirely by the *elements* on that ground — the
+   blue accent for controls, and `--orp` for the RSVP pivot letter, which is the
+   only red in the product. Nothing else — no badge, no error state, no chart —
+   may use the pivot red, so the single coloured glyph in a reading session is
+   always the letter the eye should land on.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* --- Surfaces: a neutral grey ladder -----------------------------------------
+     Pure black at the bottom, then eight-percent steps of neutral grey. These
+     are deliberately *not* hue-shifted: on black, a tinted dark grey reads as
+     a colour cast rather than as a raised surface. Depth comes from the step
+     itself and from the hairlines, not from the hue. */
+  --void: #000000;
+  --bg: #000000;
+  --surface: #0d0d0d;
+  --surface-2: #141414;
+  --surface-3: #1c1c1c;
+  --surface-4: #262626;
+
+  /* --- Ink ----------------------------------------------------------------
+     Very slightly warm, matching the original reader's `#f2f1ee`: pure white
+     on pure black is the harshest pairing a screen can show, and a thousand
+     words in it is tiring. */
+  --ink: #f4f3f0;
+  --ink-2: #c2c0bb;
+  --ink-3: #8b8985;
+  --ink-4: #5d5b58;
+
+  /* --- Hairlines --------------------------------------------------------------
+     Alpha-based so they compose correctly over any surface in the ladder. On
+     black these are the only thing separating one surface from the next, so
+     they carry more weight here than they would on a lighter ground. */
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.14);
+  --line-3: rgba(255, 255, 255, 0.22);
+
+  /* --- Accent: iris (blue) ------------------------------------------------------
+     One blue ramp in three registers, because the accent is asked to do three
+     different jobs and they do not have the same contrast requirement:
+
+       --iris-deep   the shadow end of every accent gradient
+       --iris        the control fill — buttons, the checked switch
+       --iris-lite   accent *text and glyphs* on the black ground, the only role
+                     that must clear 4.5:1. It measures ~10:1, which is why
+                     labels and small icons use this one and never `--iris`.
+
+     The three washes are the same hue at 14 / 24 / 42%, so a tint, a ring and
+     a glow all read as one material rather than three coincidentally-similar
+     blues. */
+  --iris: #2f7cf6;
+  --iris-lite: #8ab4fb;
+  --iris-deep: #1a4fc4;
+  --iris-ink: #ffffff;
+  --iris-wash: rgba(47, 124, 246, 0.14);
+  --iris-wash-2: rgba(47, 124, 246, 0.24);
+  --iris-glow: rgba(47, 124, 246, 0.42);
+
+  /* --- Semantic (kept desaturated so nothing competes with the pivot red) ----- */
+  --ok: #4ec9a8;
+  --warn: #d9a441;
+  --danger: #d4645c;
+
+  /* --- The reserved colour. Pivot letter ONLY. ------------------------------- */
+  --orp: #ff4a3d;
+
+  /* --- Glass ------------------------------------------------------------------
+     `--glass-fill` and `--glass-edge` are the two halves of every frosted
+     surface: a barely-there white wash, and the 1px top-edge highlight that
+     sells the pane as a physical sheet. */
+  --glass-fill: rgba(255, 255, 255, 0.045);
+  --glass-fill-2: rgba(255, 255, 255, 0.07);
+  --glass-fill-3: rgba(255, 255, 255, 0.1);
+  --glass-edge: rgba(255, 255, 255, 0.09);
+  --glass-edge-2: rgba(255, 255, 255, 0.16);
+  --glass-blur: 22px;
+  --glass-sat: 150%;
+
+  /* --- Neumorphic shadows -------------------------------------------------------
+     Dark mode neumorphism needs a light source from the top-left and a
+     deep shadow to the bottom-right. `--nm-light` is deliberately very faint:
+     on near-black, anything stronger turns every raised panel milky. */
+  --nm-light: rgba(255, 255, 255, 0.045);
+  --nm-dark: rgba(0, 0, 0, 0.6);
+  --nm-dark-2: rgba(0, 0, 0, 0.75);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.72);
+  --shadow-xl: 0 40px 90px -20px rgba(0, 0, 0, 0.8);
+  --shadow-glow: 0 0 0 1px rgba(47, 124, 246, 0.4), 0 12px 40px -10px var(--iris-glow);
+
+  /* --- Radii ------------------------------------------------------------------ */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-2xl: 36px;
+  --r-pill: 999px;
+
+  /* --- Spacing ---------------------------------------------------------------- */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 22px;
+  --s-6: 30px;
+  --s-7: 44px;
+  --s-8: 64px;
+
+  /* --- Motion -----------------------------------------------------------------
+     Two curves only. `--ease` for anything inside the page, `--spring` for
+     surfaces that appear or are dragged. Keeping the set tiny is what makes
+     the whole app feel like one thing. */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast: 140ms;
+  --t: 240ms;
+  --t-slow: 420ms;
+
+  /* --- Layout ----------------------------------------------------------------- */
+  --rail-w: 244px;
+  --rail-w-min: 76px;
+  --topbar-h: 68px;
+  --page-max: 1220px;
+
+  /* --- Stacking ---------------------------------------------------------------
+     Named, and spaced by ten so anything can slot between two existing layers
+     without renumbering the rest. The reader relies on this: its chapter rail
+     must sit above the transport bar, which is why the rail is a drawer and not
+     an inset — insetting the controls would reflow the reading stage. */
+  --z-base: 0;
+  --z-ambient: -1;
+  --z-sticky: 10;
+  --z-chrome: 20;
+  --z-transport: 30;
+  --z-scrim: 40;
+  --z-drawer: 50;
+  --z-topbar: 60;
+  --z-titlecard: 70;
+  --z-dialog: 80;
+  --z-toast: 90;
+
+  /* --- Type -------------------------------------------------------------------
+     System stacks only: no webfont request, so the first paint is instant and
+     the app has no external dependency. Segoe UI Variable (Win 11) and SF Pro
+     (macOS) are both variable fonts, so the weights below resolve properly. */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+    "SF Pro Text", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
+    "SF Pro Display", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: Georgia, "Times New Roman", "Iowan Old Style", Cambria, serif;
+  /* Monospace, for `code`/`kbd`/`samp` and for tabular figures. No longer used
+     by the reading stage — see `--font-stage` below — but a fixed advance is
+     still what you want anywhere digits must not shuffle. */
+  --font-read: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  /* The stage face, and why it is not `--font-read` any more: the reading word
+     was monospaced to stop the pivot letter sliding sideways as words change.
+     The original single-file reader used a serif (Georgia) and got the same
+     stability a different way — by giving the pivot its own column in the grid
+     between two equal `minmax(0, 1fr)` halves of the line, so the sides grow
+     outward in step and the pivot stays put. That gets the steadiness without
+     the typewriter look, and it is what the reader was asked to match. */
+  --font-stage: var(--font-serif);
+}
+
+/* Honour the OS "reduce motion" setting. The app is animation-rich, so this
+   has to actually stop the animations rather than merely shorten them. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 1ms;
+    --t: 1ms;
+    --t-slow: 1ms;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

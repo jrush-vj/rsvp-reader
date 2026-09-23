@@ -1,0 +1,367 @@
+/* ==========================================================================
+   Base — reset, typography, ambient background, shared utilities
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.55;
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden; /* the panes scroll, not the window */
+}
+
+#root {
+  isolation: isolate;
+}
+
+/* --- Typography ------------------------------------------------------------ */
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 650;
+  line-height: 1.16;
+  letter-spacing: -0.022em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(2rem, 1.3rem + 2.6vw, 3.5rem);
+  letter-spacing: -0.035em;
+}
+h2 {
+  font-size: clamp(1.35rem, 1.1rem + 0.8vw, 1.85rem);
+}
+h3 {
+  font-size: 1.05rem;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+}
+
+button {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Removes the 300ms double-tap zoom delay on touch without killing pinch. */
+button,
+a,
+label,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+code,
+kbd,
+samp {
+  font-family: var(--font-read);
+  font-size: 0.86em;
+}
+
+/* --- Focus -------------------------------------------------------------------
+   A single visible ring everywhere, keyboard-only, so a reader who tabs never
+   loses the cursor but a mouse user never sees a box appear. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--iris-lite);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* --- Selection --------------------------------------------------------------- */
+
+::selection {
+  background: var(--iris-wash-2);
+  color: var(--ink);
+}
+
+/* --- Scrollbars --------------------------------------------------------------
+   Styled to disappear into the surface: a rounded thumb with no track. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-3) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: var(--r-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* --- Ambient wash ---------------------------------------------------------
+   A very faint lift behind everything, drifting slowly. The surfaces are
+   translucent, so whatever is back here moves *behind* the glass rather than
+   being painted on it.
+
+   Kept strictly neutral. This used to be three violet blooms, which tinted the
+   whole page and undid the AMOLED ground: a coloured glow over `#000` is still
+   a lit background. Now it is only white at 2–4%, which reads as depth and
+   costs no hue. `position: fixed` keeps it from scrolling, and `blur()` softens
+   the edges so no bloom is ever identifiable as a circle. */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--void);
+}
+
+.ambient::before,
+.ambient::after,
+.ambient__blob {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+}
+
+.ambient::before {
+  width: 62vw;
+  height: 62vw;
+  top: -22vw;
+  left: -14vw;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.04), transparent 68%);
+  animation: drift-a 34s var(--ease) infinite alternate;
+}
+
+.ambient::after {
+  width: 54vw;
+  height: 54vw;
+  bottom: -20vw;
+  right: -12vw;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.028), transparent 68%);
+  animation: drift-b 42s var(--ease) infinite alternate;
+}
+
+.ambient__blob {
+  width: 40vw;
+  height: 40vw;
+  top: 34%;
+  left: 44%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.02), transparent 70%);
+  animation: drift-c 50s var(--ease) infinite alternate;
+}
+
+@keyframes drift-a {
+  to {
+    transform: translate3d(9vw, 7vw, 0) scale(1.16);
+  }
+}
+@keyframes drift-b {
+  to {
+    transform: translate3d(-8vw, -6vw, 0) scale(1.22);
+  }
+}
+@keyframes drift-c {
+  to {
+    transform: translate3d(-10vw, 5vw, 0) scale(0.86);
+  }
+}
+
+/* A very fine noise overlay. Without it, large flat translucent panels show
+   banding on 10-bit-less displays; with it they read as material. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.22;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+}
+
+/* --- Glass + neumorphic material classes -------------------------------------- */
+
+/* A frosted pane. The `inset 0 1px 0` highlight is what makes the top edge
+   catch light, so the panel reads as a sheet of glass rather than a flat fill. */
+.glass {
+  background: var(--glass-fill);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  border: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow-md);
+}
+
+/* Raised from the surface: dark bottom-right, faint light top-left. */
+.nm-raise {
+  background: linear-gradient(145deg, var(--surface-3), var(--surface));
+  box-shadow: -3px -3px 9px var(--nm-light), 7px 7px 18px var(--nm-dark);
+}
+
+/* Pressed into the surface: the same two shadows, swapped and shrunk, plus an
+   inset pair so the panel looks *carved* rather than merely dark. */
+.nm-sink {
+  background: linear-gradient(145deg, var(--surface), var(--surface-2));
+  box-shadow: inset 3px 3px 8px var(--nm-dark), inset -2px -2px 6px var(--nm-light);
+}
+
+/* --- Utilities ---------------------------------------------------------------- */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.col {
+  display: flex;
+  flex-direction: column;
+}
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.wrap {
+  flex-wrap: wrap;
+}
+
+.muted {
+  color: var(--ink-3);
+}
+.dim {
+  color: var(--ink-2);
+}
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Gradient text, used sparingly — the wordmark and the landing headline. */
+.grad-text {
+  background: linear-gradient(100deg, var(--ink) 12%, var(--iris-lite) 58%, var(--iris) 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* --- Shared keyframes --------------------------------------------------------- */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position: 200% 0;
+  }
+}

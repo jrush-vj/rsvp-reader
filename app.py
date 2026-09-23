@@ -29,6 +29,7 @@ Setup:
 
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import shutil
@@ -47,11 +48,140 @@ import tokenizer
 BASE_DIR = Path(__file__).resolve().parent
 HTML_FILENAME = "rsvp_reader.html"
 BOOKS_DIR = BASE_DIR / "books"
+# The React front end, built by `npm run build` inside `web/`. Absent in a
+# checkout that has not been built yet, which is why every route below still
+# falls back to the original single-file reader.
+DIST_DIR = BASE_DIR / "web" / "dist"
+
+
+def dist_file(rel: str) -> Path | None:
+    """
+    Resolve a path inside `web/dist`, or None if it does not exist.
+
+    `resolve()` plus `is_relative_to` is what keeps a crafted URL like
+    ``/../../app.py`` from escaping the build directory.
+    """
+    if not DIST_DIR.is_dir():
+        return None
+    candidate = (DIST_DIR / rel.lstrip("/")).resolve()
+    try:
+        candidate.relative_to(DIST_DIR.resolve())
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
 
 app = Flask(__name__)
 CORS(app)  # harmless now that we serve same-origin; keeps file:// usage working too
 
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB upload cap
+
+# Flask pretty-prints JSON when the app is in debug mode, on the theory that a
+# human is reading the response. In this app the debug flag is on during
+# development and the largest response is 60k word objects, so the theory costs
+# real work on every request to `/words`: it expands 2.2 MB of JSON into 4.2 MB
+# of indented text, which then has to be gzipped, sent, and parsed. The
+# indentation is pure overhead — the browser is the only consumer, and `curl`
+# is just as legible with `python -m json.tool` on the other end.
+#
+# Setting this explicitly means the payload is the same whichever mode the
+# server runs in, so what is measured in development is what ships.
+app.json.compact = True
+
+
+# ---------------------------------------------------------------------------
+# Response compression and caching
+# ---------------------------------------------------------------------------
+#
+# The reading stream is the one response in this app that is genuinely large:
+# ~60k word objects for a full-length book. Measured on the reference book it
+# is 2.2 MB of compact JSON, and `jsonify`'s pretty-printing inflates that to
+# 4.2 MB on the wire. Both of those numbers are paid before the reader can show
+# the first word, so this is the single highest-leverage thing the server does.
+#
+# The fix is not a new encoding — it is gzip. The stream is 59,619 near-identical
+# objects, which is close to the best case for DEFLATE, and it lands at 193 KB:
+# an 11.4x reduction for one wrappper function and no change to the API shape.
+# A hand-rolled `[text, orp, pause]` array encoding was measured too and only
+# bought a further 13% *on top of* gzip (165 KB vs 193 KB), which is not worth
+# a client-side rewrite of how words are constructed. So the contract stays.
+#
+# Compression is applied only to JSON. The content-hashed bundles under
+# `/assets/` are already compressed for their own formats (the JS and CSS are
+# minified, the fonts and images are binary), so re-deflating them would burn
+# CPU per request to save nothing.
+COMPRESS_MIN_BYTES = 1024
+
+# The reference payload deflates at roughly 11:1. A response that does not
+# shrink to at least this fraction is incompressible (already-compressed data
+# mislabelled as JSON, say), and sending it unencoded is the honest choice.
+COMPRESS_MIN_RATIO = 0.9
+
+
+@app.after_request
+def compress_json(response):
+    """
+    Gzip JSON responses when the client will take them.
+
+    Written by hand rather than pulled in as a dependency: `flask-compress`
+    would be a new pinned requirement for one `gzip.compress` call, and this
+    app deliberately keeps its dependency list short enough to read.
+    """
+    # `Accept-Encoding` is a comma-separated list that may carry a quality
+    # value, so `"gzip" in value` is the check — a plain equality test would
+    # miss `gzip;q=0.8` and `br, gzip`.
+    accepts_gzip = "gzip" in (request.headers.get("Accept-Encoding") or "")
+    if not accepts_gzip:
+        return response
+
+    if response.mimetype != "application/json":
+        return response
+
+    # Only a fully-buffered, successful, unencoded body can be compressed here.
+    # A 304 carries no body at all, and re-encoding a streaming response would
+    # mean holding all of it in memory first.
+    if response.status_code != 200 or response.direct_passthrough or response.headers.get("Content-Encoding"):
+        return response
+
+    body = response.get_data()
+    if len(body) < COMPRESS_MIN_BYTES:
+        return response
+
+    packed = gzip.compress(body, compresslevel=6)
+    if len(packed) >= len(body) * COMPRESS_MIN_RATIO:
+        return response
+
+    response.set_data(packed)
+    response.headers["Content-Encoding"] = "gzip"
+    response.headers["Content-Length"] = str(len(packed))
+
+    # Essential, not decorative. Without it a shared cache is entitled to hand
+    # this gzipped body to a client that never asked for gzip, and to hand an
+    # uncompressed body to one that did.
+    response.headers.add("Vary", "Accept-Encoding")
+    return response
+
+
+@app.after_request
+def cache_headers(response):
+    """
+    Cache policy for the two kinds of thing this server sends.
+
+    Vite writes the front end's assets with a content hash in the filename, so
+    a given URL's bytes never change — a rebuild produces a new name. Those can
+    be cached indefinitely. `index.html` is the opposite: it is the file that
+    names the current hashes, so it must be revalidated on every load or a
+    deploy would keep pointing at the previous bundle.
+
+    `send_from_directory` already supplies a `Last-Modified` and an `ETag`, so
+    `no-cache` costs a 304 rather than a re-download — the shell is revalidated,
+    not re-fetched.
+    """
+    path = request.path
+    if response.status_code == 200 and path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif response.mimetype == "text/html":
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +305,10 @@ def summarise(meta: dict, state: dict) -> dict:
         "book_id": meta.get("book_id"),
         "filename": meta.get("filename"),
         "created": meta.get("created"),
+        # When the reader last had this book open, or None if it never has.
+        # `created` is the upload time and never moves, so the library list
+        # sorts and labels on this one to answer "what was I reading?".
+        "updated": state.get("updated"),
         "total_pages": meta.get("total_pages"),
         "method": meta.get("method"),
         "confidence": meta.get("confidence"),
@@ -472,18 +606,58 @@ def patch_section(book_id: str, section_id: str):
 @app.route("/", methods=["GET"])
 def index():
     """
-    Serve the reader UI directly, so http://localhost:5000 is the only
-    address you need to remember - no separate file:// tab required.
-    Requires rsvp_reader.html to sit next to this app.py.
+    The app's front door.
+
+    Serves the built React app when `web/dist` exists, and the original
+    single-file reader otherwise, so the server is useful before the front end
+    has ever been built.
     """
+    shell = dist_file("index.html")
+    if shell is not None:
+        return send_from_directory(shell.parent, shell.name)
+
     html_path = BASE_DIR / HTML_FILENAME
     if not html_path.exists():
         return (
-            f"{HTML_FILENAME} not found next to app.py. "
-            f"Put both files in the same folder ({BASE_DIR}).",
+            "No front end found. Either build the React app "
+            "(cd web && npm install && npm run build), or put "
+            f"{HTML_FILENAME} next to app.py ({BASE_DIR}).",
             500,
         )
     return send_from_directory(BASE_DIR, HTML_FILENAME)
+
+
+@app.route("/<path:path>", methods=["GET"])
+def spa(path: str):
+    """
+    History-API fallback for the React app.
+
+    The front end uses `BrowserRouter`, so `/library` and `/read/<id>` are real
+    URLs that only exist on the client. Anything that is not an API call and
+    not a real file in the build is answered with `index.html` so a deep link
+    or a refresh lands on the app instead of a 404.
+
+    Two deliberate guards:
+
+    - `/api/...` is never answered with HTML. A mistyped endpoint must return
+      JSON, not a page, or a client parsing the response fails confusingly.
+    - Flask's built-in static route is matched first, so anything actually on
+      disk is served as itself.
+    """
+    if path.startswith("api/"):
+        return jsonify({"error": f"No such endpoint: /{path}"}), 404
+
+    asset = dist_file(path)
+    if asset is not None:
+        return send_from_directory(asset.parent, asset.name)
+
+    shell = dist_file("index.html")
+    if shell is not None:
+        return send_from_directory(shell.parent, shell.name)
+
+    # No build: fall back to the original reader for its own single page, and
+    # 404 honestly for anything else.
+    return jsonify({"error": f"Not found: /{path}"}), 404
 
 
 @app.route("/api/health", methods=["GET"])

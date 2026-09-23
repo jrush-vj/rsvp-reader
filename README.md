@@ -24,6 +24,11 @@ network call beyond `localhost`.
    seconds — skippable with Space, Enter, Escape or a click — and then the words
    start from that section's first word.
 
+The app is a small multi-page shell rather than one long screen: a sidebar menu
+on the left, the page body in the middle, and — in the reader — a chapter rail
+on the right. Every page has its own address, so the back button and a bookmark
+both work.
+
 Your position and your section choices are saved per book, so closing the tab
 and coming back offers **Resume** or **Start over**.
 
@@ -55,17 +60,41 @@ Python, so it installs on Windows on ARM64 where PyMuPDF publishes no wheel.
 
 ## Using it
 
-**Add a book.** On the first visit you land on the upload screen. Drop a PDF on
-the drop zone, or click to browse. The PDF is parsed once and kept, so opening
-it again later is a file read rather than a re-parse.
+### Pages
 
-**Paste text instead.** If you just want to read a block of text — meeting
-notes, an article — use the paste box. That path needs no backend and nothing is
-saved.
+| Page      | Route        | What it is                                                     |
+| --------- | ------------ | -------------------------------------------------------------- |
+| Dashboard | `#`          | Library at a glance: totals, what to continue, and a setup checklist |
+| Library   | `#library`   | Every processed book, with **Open** and **Delete**              |
+| Add a book| `#add`       | The PDF drop zone, the paste box, and the backend address       |
+| Timelines | `#timelines`  | One reading lane per book, divided into its chapters            |
+| Settings  | `#settings`  | Reading speed, backend address, chapter title cards             |
+| Picker    | `#picker`    | A book's section tree (reached from a book row)                 |
+| Reader    | `#read`      | The word stage (reached by starting a book)                     |
+
+A book's picker and the reader are deliberately *not* in the menu: both are
+about one specific book, and the menu holds only destinations that make sense
+without one.
+
+**Dashboard.** Books, words read, share of what you chose, in-progress and
+finished counts, and the time still to read. Below that is **Continue reading**
+with the book you were last in, then a short checklist of the things that make
+the app work.
+
+**Add a book.** Drop a PDF on the drop zone, or click to browse. The PDF is
+parsed once and kept, so opening it again later is a file read rather than a
+re-parse. The paste box is on the same page and reads a block of text — meeting
+notes, an article — with no backend and nothing saved.
 
 **Library.** Every processed book is listed with its word count, section count,
 the detection method used, and how far through it you are. **Open** (or
 **Resume**) goes to the picker; **Delete** asks first and names the file.
+
+**Timelines.** Each book gets a lane split into its chapters, sized by word
+count, so the shape of a book is visible before you open it. The current chapter
+is marked and completed ones are ticked. Clicking a chapter jumps straight into
+the reader at that chapter's first word. The picker carries the same lane above
+the tree; there, clicking a chapter scrolls to and highlights its row.
 
 **The picker.** Rows you can act on have a live checkbox; front and back matter
 the reader is deliberately not offered are dimmed and disabled, shown so the
@@ -73,9 +102,32 @@ book's structure stays legible. **Select all** / **Select none** work on the
 whole tree. If you have a saved position, a note at the top offers **Resume** or
 **Start over**.
 
-**While reading.** Space toggles play, the arrow keys nudge speed and jump
-ten seconds either way, and `R` restarts the book. The controls fade out while
-you read and come back on mouse movement.
+### While reading
+
+The reader has three pieces of chapter chrome, all built from the same list of
+boundaries the title cards use:
+
+- a **chapter bar** under the seek slider, each segment as wide as its chapter
+  is long, so the current chapter is one click away and its density is visible;
+- a **quick-links rail** on the right, one line per chapter with a progress bar,
+  opened with **Chapters** or `C`. It opens by itself on a wide window;
+- the **title card** at each boundary, which holds playback still until you
+  dismiss it.
+
+| Key                | Does                                                  |
+| ------------------ | ----------------------------------------------------- |
+| `Space`            | play / pause                                          |
+| `←` `→`            | ten seconds back / forward                            |
+| `↑` `↓`            | reading speed, in steps of 50 wpm                     |
+| `PgUp` / `PgDn`    | previous / next chapter (`PgUp` restarts the current one first) |
+| `C`                | open / close the chapter rail                         |
+| `F`                | full screen — hides the sidebar and the page padding   |
+| `R`                | restart the book                                      |
+| `Esc`              | close the rail, or bring the controls back             |
+
+Full screen is remembered between sessions. The controls fade out a couple of
+seconds into playback and come back on any key or mouse movement; while the rail
+is open they stay put, since they are how you step chapters.
 
 ---
 
@@ -170,7 +222,9 @@ With the server running:
 
 ```bash
 python scripts/verify_tokenizer.py                            # token offsets and pauses
+python scripts/verify_detector.py                             # structure detection heuristics
 python scripts/verify_api.py                                   # endpoint behaviour
+python scripts/verify_book.py                                  # on-disk book vs schema
 python scripts/verify_upload.py                                # upload validation
 python scripts/verify_ui_contract.py http://127.0.0.1:5000 <book_id>   # the JSON the UI reads
 python scripts/check_reader_js.py                              # frontend script and its element ids

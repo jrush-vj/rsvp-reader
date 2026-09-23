@@ -9,3 +9,11 @@ __pycache__/
 # script body that check_reader_js.py extracts out of the HTML on every run.
 /tmp/
 scripts/_reader_script.js
+
+# The React front end under web/. `node_modules` is huge and reproducible, and
+# `dist` is a build artifact — Flask serves it, but it is rebuilt with
+# `npm run build`, so it does not belong in the repository. Note `dist` is
+# ignored only inside web/, so a stray build output elsewhere still shows up.
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
