@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { LinkButton } from "../components/ui/Button";
@@ -27,8 +27,10 @@ import { mostRecent, totals, useLibrary } from "../store/library";
  */
 
 const DEMO_SENTENCE =
-  "Speed reading works because your eyes stop moving. Focus on one point. " +
-  "Let each word arrive. Comprehension follows attention.";
+  "BookTube shows you one word at a time, aligned on the point your eye " +
+  "reads best. No saccades, no re-reading, no line tracking — just the words, " +
+  "at the pace you choose. Most people settle comfortably between 300 and 700 " +
+  "words per minute.";
 
 export function HomePage() {
   const { books, initialLoading } = useLibrary();
@@ -280,6 +282,22 @@ function DemoStage() {
   const [i, setI] = useState(0);
   const [wpm] = useState(420);
 
+  /**
+   * The underline's geometry, measured from the word actually on screen.
+   *
+   * Three separate spans rather than one centred mark, because the underline
+   * has to say *which word* is being read: it starts where the word starts and
+   * ends where it ends, so its width changes with every word and your eye
+   * learns the shape of the beat rather than just its position. A fixed mark
+   * would sit under the pivot and tell you nothing new, since the pivot is
+   * already the brightest thing on screen.
+   */
+  const preRef = useRef<HTMLSpanElement | null>(null);
+  const postRef = useRef<HTMLSpanElement | null>(null);
+  const [span, setSpan] = useState<{ left: number; width: number } | null>(null);
+  /** The sweep's containing block — see the note on the measurement below. */
+  const stageRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (reduce) return;
     let cancelled = false;
@@ -304,6 +322,55 @@ function DemoStage() {
 
   const word = words[i % words.length];
   const [pre, pivot, post] = word ? splitAtOrp(word) : ["", "", ""];
+  const lineRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * How long this word stays on screen — the same number the tick above uses.
+   *
+   * The underline travels across a fraction of it, so the sweep always lands
+   * before the word changes. A spring was tried first and was wrong here: at
+   * 420 wpm a word lasts 143 ms, and a spring that looks luxurious at 60 fps is
+   * still travelling at 143 ms, so the underline spent the entire beat chasing
+   * the word and never once sat under it. Scaling to the beat means the effect
+   * stays correct at 150 wpm and at 900.
+   */
+  const beat = (60_000 / wpm) * (word?.pause || 1);
+  const travel = Math.max(70, Math.min(beat * 0.5, 190));
+
+  /**
+   * Re-measure after every word.
+   *
+   * Measured from the *rendered* spans rather than computed from character
+   * counts, because the stage is laid out on a grid with a proportional serif:
+   * one "m" is not two "i"s, and a computed width would visibly disagree with
+   * the glyphs above it. `getBoundingClientRect` after paint is the only thing
+   * that is guaranteed to match.
+   *
+   * The origin is the **stage**, not the word row, and that is load-bearing:
+   * the sweep is `position: absolute`, so its `left` is resolved against its
+   * containing block's *padding box*, which is the stage. Measuring against the
+   * word div instead left the sweep permanently 18px to the left — exactly the
+   * stage's horizontal padding — and it read as a lag rather than an offset.
+   *
+   * `useLayoutEffect` and not `useEffect`: the underline has to be in its new
+   * place in the same frame the word appears, or it trails the word by one
+   * frame and the whole effect reads as lag — which is precisely what this
+   * page is claiming the product does not do.
+   */
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    const a = preRef.current;
+    const b = postRef.current;
+    if (!stage || !a || !b) return;
+    const box = stage.getBoundingClientRect();
+    const start = a.getBoundingClientRect();
+    const end = b.getBoundingClientRect();
+    if (!box.width) return;
+    setSpan({
+      left: start.left - box.left,
+      width: Math.max(end.right - start.left, 1),
+    });
+  }, [i, words]);
 
   return (
     <div className="demo">
@@ -314,13 +381,41 @@ function DemoStage() {
         <span className="demo__name">Reading — {wpm} wpm</span>
       </div>
 
-      <div className="demo__stage">
-        <div className="demo__word">
-          <span className="demo__pre">{pre}</span>
+      <div className="demo__stage" ref={stageRef}>
+        <div className="demo__word" ref={lineRef}>
+          {/* The refs sit on *inner* inline spans, not on the grid cells.
+              A grid cell is a block and stretches to fill its track, so
+              measuring it returns the track's box — `pre` and `post` would
+              both report the full line width and the sweep would sit still
+              under the whole sentence. An inline element's box is exactly its
+              text, which is what the underline has to follow. */}
+          <span className="demo__pre">
+            <span ref={preRef}>{pre}</span>
+          </span>
           <span className="demo__pivot">{pivot}</span>
-          <span className="demo__post">{post}</span>
+          <span className="demo__post">
+            <span ref={postRef}>{post}</span>
+          </span>
         </div>
-        <span className="demo__tick" aria-hidden="true" />
+
+        {/* The sweep. It is driven by a live measurement of the word above it,
+            so its width changes with every word and the eye learns the shape of
+            the beat rather than just its position. `initial={false}` so the
+            first word does not slide in from the left edge. */}
+        <motion.span
+          className="demo__sweep"
+          aria-hidden="true"
+          initial={false}
+          animate={
+            span
+              ? { left: span.left, width: span.width, opacity: 1 }
+              : { opacity: 0 }
+          }
+          transition={{
+            duration: travel / 1000,
+            ease: [0.16, 1, 0.3, 1],
+          }}
+        />
       </div>
 
       <div className="demo__foot">

@@ -171,8 +171,25 @@ samp {
    Kept strictly neutral. This used to be three violet blooms, which tinted the
    whole page and undid the AMOLED ground: a coloured glow over `#000` is still
    a lit background. Now it is only white at 2–4%, which reads as depth and
-   costs no hue. `position: fixed` keeps it from scrolling, and `blur()` softens
-   the edges so no bloom is ever identifiable as a circle. */
+   costs no hue. `position: fixed` keeps it from scrolling, and the gradient
+   softens the edges so no bloom is ever identifiable as a circle.
+
+   The softness comes from the `radial-gradient` stops, NOT from a `filter:
+   blur()`. This matters and was the single biggest cause of scroll stutter on
+   Brave. A `blur(90px)` on a disc that is 40–62vw across is a paint-surface
+   sized texture; when the drift animation also scaled it, the compositor had to
+   re-rasterise that 90px blur on every frame, forever, on a layer that sits
+   under a 1593px scrolling column. Brave guards GPU rasterisation far more
+   conservatively than the Electron Chromium inside VS Code, so what was a
+   dropped frame there read as visible stutter here.
+   A multi-stop gradient is the same picture computed once instead of
+   repeatedly: it rasterises on the first frame and is never invalidated.
+
+   For the same reason the keyframes only ever `translate3d`. Translation of a
+   cached layer is a pure compositor move; `scale()` re-rasterises it. The
+   drift is identical to the eye either way — non-integer scaling of a soft
+   radial wash is not something a viewer can see, but it is something the
+   rasteriser has to redo every frame. */
 .ambient {
   position: fixed;
   inset: 0;
@@ -188,8 +205,8 @@ samp {
   content: "";
   position: absolute;
   border-radius: 50%;
-  filter: blur(90px);
   opacity: 0.5;
+  will-change: transform;
 }
 
 .ambient::before {
@@ -197,7 +214,13 @@ samp {
   height: 62vw;
   top: -22vw;
   left: -14vw;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.04), transparent 68%);
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.03) 30%,
+    rgba(255, 255, 255, 0.014) 55%,
+    rgba(255, 255, 255, 0) 82%
+  );
   animation: drift-a 34s var(--ease) infinite alternate;
 }
 
@@ -206,7 +229,13 @@ samp {
   height: 54vw;
   bottom: -20vw;
   right: -12vw;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.028), transparent 68%);
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.028) 0%,
+    rgba(255, 255, 255, 0.021) 30%,
+    rgba(255, 255, 255, 0.01) 55%,
+    rgba(255, 255, 255, 0) 82%
+  );
   animation: drift-b 42s var(--ease) infinite alternate;
 }
 
@@ -215,35 +244,56 @@ samp {
   height: 40vw;
   top: 34%;
   left: 44%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.02), transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0.015) 30%,
+    rgba(255, 255, 255, 0.007) 55%,
+    rgba(255, 255, 255, 0) 84%
+  );
   animation: drift-c 50s var(--ease) infinite alternate;
 }
 
+/* Translation only — see the note on `.ambient` above for why no `scale()`. */
 @keyframes drift-a {
   to {
-    transform: translate3d(9vw, 7vw, 0) scale(1.16);
+    transform: translate3d(9vw, 7vw, 0);
   }
 }
 @keyframes drift-b {
   to {
-    transform: translate3d(-8vw, -6vw, 0) scale(1.22);
+    transform: translate3d(-8vw, -6vw, 0);
   }
 }
 @keyframes drift-c {
   to {
-    transform: translate3d(-10vw, 5vw, 0) scale(0.86);
+    transform: translate3d(-10vw, 5vw, 0);
   }
 }
 
 /* A very fine noise overlay. Without it, large flat translucent panels show
-   banding on 10-bit-less displays; with it they read as material. */
+   banding on 10-bit-less displays; with it they read as material.
+
+   Deliberately NO `mix-blend-mode`. This is a full-viewport `position: fixed`
+   layer, and a non-normal blend mode cannot be applied to a cached compositor
+   layer — the browser has to read the backdrop back and blend against it. While
+   a 1593px column scrolls underneath, that is a backdrop read-back over every
+   newly exposed pixel, every frame. That cost is invisible on the Electron
+   Chromium in VS Code and very visible on Brave.
+
+   The character is preserved by rendering the same noise with normal alpha at
+   a very low opacity. `overlay` preserved pure black (overlay against #000 is
+   #000), so the old grain was invisible on the AMOLED ground and only showed on
+   the translucent panels; a normal-alpha speckle at this level lands in the
+   same perceptual place without lifting the black, which the AMOLED brief
+   depends on. `overlay` would give the nicer "lit only where there is light"
+   falloff, but it is the blend itself, not the noise, that costs. */
 .grain {
   position: fixed;
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  opacity: 0.22;
-  mix-blend-mode: overlay;
+  opacity: 0.03;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
 }
 

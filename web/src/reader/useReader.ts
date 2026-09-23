@@ -12,11 +12,17 @@ import type { Boundary } from "../lib/types";
  *
  *   delay = 60000 / wpm * word.pause
  *
- * Playback is a self-chaining `setTimeout` rather than an interval or a
- * `requestAnimationFrame` accumulator. Each word's delay is decided *after* the
- * previous one has been shown, which is what lets punctuation hold without the
- * schedule drifting, and lets a speed change take effect on the very next word
- * instead of at the end of a batch.
+ * The *delay* is still decided after each word is shown, but the timer that
+ * waits it out runs in `tempo.worker.ts`. A `setTimeout` on this thread is
+ * clamped to about once a second once the tab is hidden, which stalled the
+ * reader to roughly 56 wpm at a 775 wpm setting — see that file for the
+ * measurements. A worker's timers are not clamped, and neither is delivery of
+ * its messages, so moving the schedule off this thread is the whole fix.
+ *
+ * Only the clock moved. The words and the rendering deliberately stay here:
+ * posting 59,619 word objects to a worker costs 542 ms of structured clone
+ * against 144 ms to fetch and parse them in the page, and playback already
+ * holds 60 fps with no long tasks, so there was nothing else worth moving.
  *
  * All mutable playback state lives in refs and is mirrored into React state
  * only for rendering. A state machine driven by React effects cannot express
@@ -119,7 +125,14 @@ export function useReader(source: ReaderSource, opts: Options) {
   // --- playback state: refs are the source of truth -------------------------
   const idxRef = useRef(0);
   const playingRef = useRef(false);
-  const timerRef = useRef<number | null>(null);
+  /**
+   * The playback clock, created on first play.
+   *
+   * Lazily, so merely opening a book does not spawn a thread, and never
+   * terminated on re-render — only on unmount. Re-creating it mid-session would
+   * lose the armed tick and stall playback.
+   */
+  const clockRef = useRef<Worker | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   /** Index into `boundaries` of the next title not yet announced. */
   const nextBoundaryRef = useRef(0);
@@ -163,19 +176,23 @@ export function useReader(source: ReaderSource, opts: Options) {
     nextBoundaryRef.current = at === -1 ? boundaries.length : at;
   }, [boundaries]);
 
-  /** Cancel the pending tick. */
-  const clearTimer = useCallback(() => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
+  /**
+   * Silence the clock.
+   *
+   * The worker is told to stop rather than merely ignored, so a `pause` that
+   * lands mid-word cannot be followed by one more advance. `playingRef` is
+   * still checked on the way in, because a tick already in flight when this is
+   * called is delivered asynchronously and must be dropped.
+   */
+  const stopClock = useCallback(() => {
+    clockRef.current?.postMessage({ type: "stop" });
   }, []);
 
   const pause = useCallback(() => {
     playingRef.current = false;
     setPlayingState(false);
-    clearTimer();
-  }, [clearTimer]);
+    stopClock();
+  }, [stopClock]);
 
   const flushSave = useCallback(async () => {
     const id = bookIdRef.current;
@@ -264,19 +281,50 @@ export function useReader(source: ReaderSource, opts: Options) {
       finish();
       return;
     }
+    // The unchanged rule. It is handed to the worker broken into its two parts
+    // rather than as one millisecond figure, so a speed change can re-time the
+    // word already on screen without having to remember its punctuation.
     const base = 60_000 / wpmRef.current;
-    const delay = base * (w.pause || 1);
+    const pauseFactor = w.pause || 1;
 
-    timerRef.current = window.setTimeout(() => {
-      timerRef.current = null;
-      if (!playingRef.current) return;
-      commitIndex(idxRef.current + 1);
-      scheduleSave();
-      tickRef.current();
-    }, delay);
+    clockRef.current?.postMessage({ type: "arm", base, pause: pauseFactor });
   }, [words, boundaries, commitIndex, scheduleSave, pause, finish]);
 
   tickRef.current = tick;
+
+  /**
+   * Start the clock.
+   *
+   * Created on first play and kept for the life of the reader. The handler is
+   * attached once, here, so it never needs `tick` in its identity — a handler
+   * re-created on every render would be a second clock doing double duty.
+   * `tickRef` is read through at delivery time, so it always resolves to the
+   * current tick without this effect depending on it.
+   */
+  useEffect(() => {
+    if (clockRef.current) return;
+    // The Vite idiom: `new URL(..., import.meta.url)` is what lets the bundler
+    // see the worker as an entry point and emit it. A bare string path would
+    // resolve at runtime against the page URL and 404 in production.
+    const clock = new Worker(new URL("./tempo.worker.ts", import.meta.url), {
+      type: "module",
+      name: "tempo",
+    });
+    clock.onmessage = (e: MessageEvent<{ type: string }>) => {
+      // A tick already in flight when playback stopped is dropped here, and the
+      // `playingRef` guard in `tick` covers the rest. This is the only place a
+      // beat enters the main thread.
+      if (e.data?.type !== "tick" || !playingRef.current) return;
+      commitIndex(idxRef.current + 1);
+      scheduleSave();
+      tickRef.current();
+    };
+    clockRef.current = clock;
+    return () => {
+      clockRef.current = null;
+      clock.terminate();
+    };
+  }, [commitIndex, scheduleSave]);
 
   const play = useCallback(() => {
     if (!words.length || finishedRef.current) return;
@@ -312,11 +360,11 @@ export function useReader(source: ReaderSource, opts: Options) {
       // A seek while playing restarts the delay from the new word rather than
       // letting the in-flight timer land on the old one.
       if (playingRef.current) {
-        clearTimer();
+        stopClock();
         tick();
       }
     },
-    [words.length, lastIndex, commitIndex, syncBoundaryPointer, scheduleSave, clearTimer, tick],
+    [words.length, lastIndex, commitIndex, syncBoundaryPointer, scheduleSave, stopClock, tick],
   );
 
   /**
@@ -380,7 +428,7 @@ export function useReader(source: ReaderSource, opts: Options) {
    * reader chooses when to start.
    */
   useEffect(() => {
-    clearTimer();
+    stopClock();
     playingRef.current = false;
     setPlayingState(false);
     setTitleCard(null);
@@ -393,21 +441,22 @@ export function useReader(source: ReaderSource, opts: Options) {
     syncBoundaryPointer(clamped);
     // Intentionally keyed on the source identity, not on every prop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source.bookId, words, boundaries, clearTimer, syncBoundaryPointer]);
+  }, [source.bookId, words, boundaries, stopClock, syncBoundaryPointer]);
 
-  // A speed change applies from the next word: cancel the pending tick and
-  // reschedule, rather than waiting out a delay computed at the old speed.
+  // A speed change applies from the next word: re-arm rather than waiting out a
+  // delay computed at the old speed. The clock is only stopped, never rebuilt,
+  // because it holds no state worth losing — the next `tick` re-arms it.
   useEffect(() => {
     if (!playingRef.current) return;
-    clearTimer();
+    stopClock();
     tick();
-  }, [wpm, clearTimer, tick]);
+  }, [wpm, stopClock, tick]);
 
-  // Stop the tick on unmount, and flush the position so navigating away never
-  // loses the last few seconds of reading.
+  // Stop the clock on unmount, and flush the position so navigating away never
+  // loses the last few seconds of reading. The worker itself is terminated by
+  // the effect that created it.
   useEffect(() => {
     return () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
       if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
       playingRef.current = false;
       void flushSave();

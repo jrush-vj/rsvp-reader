@@ -523,17 +523,28 @@
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
-/* Glass: secondary. Translucent with a real top highlight. */
+/* Glass: secondary. Translucent with a real top highlight.
+ *
+ * No `backdrop-filter` here, deliberately, and this is the same trade
+ * `.rail-panel` documents further down. These buttons *scroll* — they sit in
+ * `.main`, and the hero of the home page puts a `btn--lg` in the middle of a
+ * 1593px column. A `backdrop-filter` region has to be re-blurred whenever what
+ * is behind it changes, which while scrolling is every frame, over the button's
+ * whole area. Chromium on Windows without reliable GPU rasterisation — which is
+ * Brave's default posture — does that on the CPU.
+ *
+ * The frosted read is preserved by paying for it in fill instead of blur: a
+ * slightly stronger translucency over the page reads as the same sheet of glass
+ * at a glance. Hover steps up one more, so the button still has a lit state. */
 .btn--glass {
   color: var(--ink-2);
-  background: var(--glass-fill);
+  background: var(--glass-fill-2);
   border-color: var(--glass-edge);
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
 }
 
 .btn--glass:hover:not(:disabled) {
   color: var(--ink);
-  background: var(--glass-fill-2);
+  background: var(--glass-fill-3);
   border-color: var(--glass-edge-2);
 }
 
@@ -1354,13 +1365,23 @@
   color: var(--ink-2);
 }
 
-.demo__tick {
+/* The sweep under the current word.
+   `left`/`width` are set inline by framer-motion from a live measurement, so
+   the only thing that belongs here is the look. It is absolutely positioned
+   rather than an `::after` on the word because a pseudo-element cannot be
+   animated between two different boxes — it would snap, and the snap is the
+   whole thing being avoided. `transform`/`opacity` keep it on the compositor;
+   `left`/`width` are animated here because the element is 2px tall and
+   repainting it is cheaper than the subpixel seams a scaled bar produces. */
+.demo__sweep {
   position: absolute;
-  bottom: 14px;
-  width: 22px;
+  bottom: 26px;
   height: 2px;
   border-radius: var(--r-pill);
-  background: var(--line-2);
+  background: linear-gradient(90deg, transparent, var(--iris), transparent);
+  box-shadow: 0 0 12px var(--iris-glow);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .demo__foot {
@@ -1991,13 +2012,14 @@
  * wash contributes almost nothing — and the reader mounts its own copy of
  * `.ambient` anyway (`ReaderPage`), which makes it two sets of discs.
  *
- * The second is that it is not free. A `blur(90px)` layer is a paint-surface
- * sized texture, and animating its transform forces the compositor to
- * re-rasterise the blur as it scales — every frame, for as long as the reader
- * is open, whether or not the book is playing. That is the one place in the app
- * where a dropped frame is actually visible: the RSVP rhythm is a word
- * appearing on a fixed beat, and a hitch in the compositor shows up as a
- * stutter in the reading.
+ * The second is that it is not free. This used to be the decisive reason: the
+ * discs carried a `blur(90px)` filter, so animating their transform made the
+ * compositor re-rasterise a paint-surface sized blur every frame, whether or
+ * not the book was playing. That cost has since been engineered away at the
+ * source — `.ambient` in `base.css` is now gradient-only and translates rather
+ * than scales, so holding it is cheap. What remains is the idle work of three
+ * compositor layers that nobody can see, which is still worth not doing while
+ * a word is on a fixed beat.
  *
  * `animation: none` rather than `display: none` because the discs are the
  * reader's own backdrop fill and removing them outright would put a patch of
