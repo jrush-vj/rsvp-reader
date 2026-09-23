@@ -36,6 +36,11 @@ body {
   overflow: hidden; /* the panes scroll, not the window */
 }
 
+.reader {
+  background: var(--reader-bg);
+  color: var(--reader-ink);
+}
+
 #root {
   isolation: isolate;
 }
@@ -150,13 +155,13 @@ samp {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.16);
   border-radius: var(--r-pill);
   border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.28);
   background-clip: content-box;
 }
 ::-webkit-scrollbar-corner {
@@ -207,6 +212,21 @@ samp {
   border-radius: 50%;
   opacity: 0.5;
   will-change: transform;
+}
+
+.ambient--app {
+  background: var(--bg);
+}
+
+.ambient--app::before {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.055), transparent 72%);
+  animation: none;
+  opacity: 0.42;
+}
+
+.ambient--app::after,
+.ambient--app .ambient__blob {
+  display: none;
 }
 
 .ambient::before {
@@ -297,6 +317,10 @@ samp {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
 }
 
+.grain--app {
+  display: none;
+}
+
 /* --- Glass + neumorphic material classes -------------------------------------- */
 
 /* A frosted pane. The `inset 0 1px 0` highlight is what makes the top edge
@@ -375,10 +399,7 @@ samp {
 
 /* Gradient text, used sparingly — the wordmark and the landing headline. */
 .grad-text {
-  background: linear-gradient(100deg, var(--ink) 12%, var(--iris-lite) 58%, var(--iris) 92%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--iris-lite);
 }
 
 /* --- Shared keyframes --------------------------------------------------------- */

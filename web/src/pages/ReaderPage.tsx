@@ -43,9 +43,6 @@ import { useToast } from "../store/toast";
  * on the pivot letter is the single most disruptive thing the UI could do.
  */
 
-/** How close to the right edge the mouse must be to reveal the rail. */
-const RAIL_EDGE = 22;
-
 const CHROME_HIDE_MS = 2600;
 
 export function ReaderPage({ paste = false }: { paste?: boolean }) {
@@ -198,7 +195,7 @@ export function ReaderPage({ paste = false }: { paste?: boolean }) {
     }, CHROME_HIDE_MS);
   }, []);
 
-  // While playing, the chrome fades; paused or hovering the rail it stays.
+  // While playing, the chrome fades; it stays visible while the rail is open.
   useEffect(() => {
     if (!playing || railOpen || titleCard) {
       if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
@@ -210,18 +207,6 @@ export function ReaderPage({ paste = false }: { paste?: boolean }) {
       if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
     };
   }, [playing, railOpen, titleCard, revealChrome]);
-
-  // --- the edge trigger for the rail ----------------------------------------
-
-  useEffect(() => {
-    if (!canHover || isPaste || !boundaries.length) return;
-    const onMove = (e: MouseEvent) => {
-      if (railPinned) return;
-      if (e.clientX >= window.innerWidth - RAIL_EDGE) setRailOpen(true);
-    };
-    window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
-  }, [canHover, isPaste, boundaries.length, railPinned]);
 
   // --- keyboard --------------------------------------------------------------
   //

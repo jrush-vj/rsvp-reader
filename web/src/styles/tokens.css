@@ -18,97 +18,84 @@
 :root {
   color-scheme: dark;
 
-  /* --- Surfaces: a neutral grey ladder -----------------------------------------
-     Pure black at the bottom, then eight-percent steps of neutral grey. These
-     are deliberately *not* hue-shifted: on black, a tinted dark grey reads as
-     a colour cast rather than as a raised surface. Depth comes from the step
-     itself and from the hairlines, not from the hue. */
-  --void: #000000;
-  --bg: #000000;
-  --surface: #0d0d0d;
-  --surface-2: #141414;
-  --surface-3: #1c1c1c;
-  --surface-4: #262626;
+   /* --- App surfaces: neutral AMOLED graphite --------------------------------- */
+   --void: #080909;
+   --bg: #0d0f10;
+   --surface: #141718;
+   --surface-2: #191d1f;
+   --surface-3: #222729;
+   --surface-4: #303639;
 
   /* --- Ink ----------------------------------------------------------------
      Very slightly warm, matching the original reader's `#f2f1ee`: pure white
      on pure black is the harshest pairing a screen can show, and a thousand
      words in it is tiring. */
-  --ink: #f4f3f0;
-  --ink-2: #c2c0bb;
-  --ink-3: #8b8985;
-  --ink-4: #5d5b58;
+   --ink: #f2f3f3;
+   --ink-2: #c6cbcd;
+   --ink-3: #969da1;
+   --ink-4: #71797e;
+
+   --reader-bg: #000000;
+   --reader-ink: #f4f3f0;
 
   /* --- Hairlines --------------------------------------------------------------
      Alpha-based so they compose correctly over any surface in the ladder. On
      black these are the only thing separating one surface from the next, so
      they carry more weight here than they would on a lighter ground. */
-  --line: rgba(255, 255, 255, 0.08);
-  --line-2: rgba(255, 255, 255, 0.14);
-  --line-3: rgba(255, 255, 255, 0.22);
+   --line: rgba(255, 255, 255, 0.07);
+   --line-2: rgba(255, 255, 255, 0.12);
+   --line-3: rgba(255, 255, 255, 0.2);
 
-  /* --- Accent: iris (blue) ------------------------------------------------------
-     One blue ramp in three registers, because the accent is asked to do three
-     different jobs and they do not have the same contrast requirement:
-
-       --iris-deep   the shadow end of every accent gradient
-       --iris        the control fill — buttons, the checked switch
-       --iris-lite   accent *text and glyphs* on the black ground, the only role
-                     that must clear 4.5:1. It measures ~10:1, which is why
-                     labels and small icons use this one and never `--iris`.
-
-     The three washes are the same hue at 14 / 24 / 42%, so a tint, a ring and
-     a glow all read as one material rather than three coincidentally-similar
-     blues. */
-  --iris: #2f7cf6;
-  --iris-lite: #8ab4fb;
-  --iris-deep: #1a4fc4;
+   /* --- Accent: signal red ------------------------------------------------------ */
+   --iris: #e34b47;
+   --iris-lite: #ff7770;
+   --iris-deep: #a52c32;
   --iris-ink: #ffffff;
-  --iris-wash: rgba(47, 124, 246, 0.14);
-  --iris-wash-2: rgba(47, 124, 246, 0.24);
-  --iris-glow: rgba(47, 124, 246, 0.42);
+   --iris-wash: rgba(227, 75, 71, 0.12);
+   --iris-wash-2: rgba(227, 75, 71, 0.22);
+   --iris-glow: rgba(227, 75, 71, 0.18);
 
-  /* --- Semantic (kept desaturated so nothing competes with the pivot red) ----- */
-  --ok: #4ec9a8;
-  --warn: #d9a441;
-  --danger: #d4645c;
+   /* --- Semantic colors stay within the monochrome + red palette --------------- */
+   --ok: #c6cbcd;
+   --warn: #969da1;
+   --danger: #e34b47;
 
   /* --- The reserved colour. Pivot letter ONLY. ------------------------------- */
-  --orp: #ff4a3d;
+   --orp: #f04444;
 
   /* --- Glass ------------------------------------------------------------------
      `--glass-fill` and `--glass-edge` are the two halves of every frosted
      surface: a barely-there white wash, and the 1px top-edge highlight that
      sells the pane as a physical sheet. */
-  --glass-fill: rgba(255, 255, 255, 0.045);
-  --glass-fill-2: rgba(255, 255, 255, 0.07);
-  --glass-fill-3: rgba(255, 255, 255, 0.1);
-  --glass-edge: rgba(255, 255, 255, 0.09);
-  --glass-edge-2: rgba(255, 255, 255, 0.16);
-  --glass-blur: 22px;
-  --glass-sat: 150%;
+   --glass-fill: rgba(255, 255, 255, 0.035);
+   --glass-fill-2: rgba(255, 255, 255, 0.055);
+   --glass-fill-3: rgba(255, 255, 255, 0.08);
+   --glass-edge: rgba(255, 255, 255, 0.08);
+   --glass-edge-2: rgba(255, 255, 255, 0.14);
+   --glass-blur: 0px;
+   --glass-sat: 100%;
 
   /* --- Neumorphic shadows -------------------------------------------------------
      Dark mode neumorphism needs a light source from the top-left and a
      deep shadow to the bottom-right. `--nm-light` is deliberately very faint:
      on near-black, anything stronger turns every raised panel milky. */
-  --nm-light: rgba(255, 255, 255, 0.045);
-  --nm-dark: rgba(0, 0, 0, 0.6);
-  --nm-dark-2: rgba(0, 0, 0, 0.75);
+   --nm-light: rgba(255, 255, 255, 0.035);
+   --nm-dark: rgba(0, 0, 0, 0.45);
+   --nm-dark-2: rgba(0, 0, 0, 0.62);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 8px 24px -6px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.72);
-  --shadow-xl: 0 40px 90px -20px rgba(0, 0, 0, 0.8);
-  --shadow-glow: 0 0 0 1px rgba(47, 124, 246, 0.4), 0 12px 40px -10px var(--iris-glow);
+   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.28);
+   --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.36);
+   --shadow-xl: 0 28px 70px rgba(0, 0, 0, 0.48);
+   --shadow-glow: 0 0 0 1px var(--iris-wash-2), 0 12px 32px var(--iris-glow);
 
   /* --- Radii ------------------------------------------------------------------ */
-  --r-xs: 6px;
-  --r-sm: 10px;
-  --r-md: 14px;
-  --r-lg: 20px;
-  --r-xl: 28px;
-  --r-2xl: 36px;
+   --r-xs: 4px;
+   --r-sm: 7px;
+   --r-md: 10px;
+   --r-lg: 14px;
+   --r-xl: 18px;
+   --r-2xl: 22px;
   --r-pill: 999px;
 
   /* --- Spacing ---------------------------------------------------------------- */
@@ -159,10 +146,8 @@
      System stacks only: no webfont request, so the first paint is instant and
      the app has no external dependency. Segoe UI Variable (Win 11) and SF Pro
      (macOS) are both variable fonts, so the weights below resolve properly. */
-  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
-    "SF Pro Text", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
-    "SF Pro Display", Roboto, "Helvetica Neue", Arial, sans-serif;
+   --font-ui: "Segoe UI", system-ui, -apple-system, sans-serif;
+   --font-display: "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-serif: Georgia, "Times New Roman", "Iowan Old Style", Cambria, serif;
   /* Monospace, for `code`/`kbd`/`samp` and for tabular figures. No longer used
      by the reading stage — see `--font-stage` below — but a fixed advance is

@@ -1,42 +1,33 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { LinkButton } from "../components/ui/Button";
 import { Card, Kicker } from "../components/ui/Surface";
-import { EmptyState, Progress, Skeleton } from "../components/ui/Feedback";
+import { Progress, Skeleton } from "../components/ui/Feedback";
 import { clock, fmtMinutes, fmtWords, minsFor } from "../lib/format";
 import { useStored, WPM_KEY } from "../lib/storage";
-import { splitAtOrp, toWord } from "../lib/words";
+import { splitAtOrp, tokenize } from "../lib/words";
 import { WPM_DEFAULT } from "../lib/speed";
-import type { Word } from "../lib/words";
-import { mostRecent, totals, useLibrary } from "../store/library";
+import { mostRecent, useLibrary } from "../store/library";
 
 /**
  * The home page.
  * ---------------------------------------------------------------------------
- * A lander first and a dashboard second, in that order. Someone opening this
- * for the first time has no books, so the top of the page has to explain what
- * the app does without a data dependency — hence the live demo. Someone coming
- * back has a book in progress, and the continue card is what they actually
- * want, so it sits directly under the hero.
- *
- * Deliberately not a stats dashboard: the reading speed, word counts and
- * history of the original were the clutter the brief asked to remove. Only two
- * numbers survive, and only because they answer "how much is left".
+ * One-screen introduction, live demonstration, and a compact resume action.
  */
 
 const DEMO_SENTENCE =
-  "BookTube shows you one word at a time, aligned on the point your eye " +
-  "reads best. No saccades, no re-reading, no line tracking — just the words, " +
-  "at the pace you choose. Most people settle comfortably between 300 and 700 " +
-  "words per minute.";
+  "Read PDFs one word at a time at your own pace. Chapters are found for you, " +
+  "and your place is saved automatically.";
+const DEMO_WORDS = tokenize(DEMO_SENTENCE);
+const DEMO_WPM = 420;
 
 export function HomePage() {
   const { books, initialLoading } = useLibrary();
   const reduce = useReducedMotion();
   const resume = mostRecent(books);
-  const sum = useMemo(() => totals(books), [books]);
+  const [demoIndex, setDemoIndex] = useState(0);
   // The reader stores the chosen pace under this key. Reading it here is what
   // keeps the "time left" honest — a hardcoded default would tell a 375 wpm
   // reader they have an hour when they have two, and the two pages would
@@ -56,16 +47,19 @@ export function HomePage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <Kicker>Read faster, one word at a time</Kicker>
+          <Kicker>A calmer way to read</Kicker>
           <h1 className="hero__title">
-            Your eyes are <span className="grad-text">wasting</span> most of
-            this page.
+            Read more. <span className="grad-text">One word</span> at a time.
           </h1>
-          <p className="hero__lede">
-            BookTube shows you one word at a time, aligned on the point your eye
-            reads best. No saccades, no re-reading, no line tracking — just the
-            words, at the pace you choose. Most people settle comfortably
-            between 300 and 700 words per minute.
+          <p className="hero__lede" aria-label={DEMO_SENTENCE}>
+            {DEMO_WORDS.map((word, index) => (
+              <span
+                key={`${index}-${word.text}`}
+                className={index === demoIndex ? "hero__lede-word is-reading" : "hero__lede-word"}
+              >
+                {word.text}
+              </span>
+            ))}
           </p>
 
           <div className="hero__cta">
@@ -77,20 +71,7 @@ export function HomePage() {
             </LinkButton>
           </div>
 
-          <ul className="hero__facts">
-            <li>
-              <Icon name="check" size={15} />
-              Nothing is sent anywhere
-            </li>
-            <li>
-              <Icon name="check" size={15} />
-              Your place is saved per book
-            </li>
-            <li>
-              <Icon name="check" size={15} />
-              Front and back matter are skipped
-            </li>
-          </ul>
+          <p className="hero__facts">Private by default · Chapters found · Auto-saved</p>
         </motion.div>
 
         <motion.div
@@ -99,11 +80,10 @@ export function HomePage() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
         >
-          <DemoStage />
+          <DemoStage index={demoIndex} onWordChange={setDemoIndex} />
         </motion.div>
       </section>
 
-      {/* ---- what to do next ------------------------------------------- */}
       <section className="next">
         <h2 className="sr-only">Continue</h2>
 
@@ -117,58 +97,17 @@ export function HomePage() {
           <ResumeCard book={resume} wpm={wpm} />
         ) : (
           <Card className="resume">
-            <EmptyState
-              icon="sparkle"
-              title="Nothing in your library yet"
-              body="Add a PDF and BookTube finds the chapters, skips the index, and starts you at word one."
-              action={
-                <LinkButton to="/add" variant="primary" icon="plus">
-                  Add a book
-                </LinkButton>
-              }
-            />
-          </Card>
-        )}
-
-        {books.length > 1 && !initialLoading && (
-          <Card className="mini-stats">
-            <div className="mini-stats__row">
-              <MiniStat label="Books" value={String(books.length)} />
-              <MiniStat label="Words" value={fmtWords(sum.words)} />
-              <MiniStat label="In progress" value={String(sum.reading)} />
-              <MiniStat label="Finished" value={String(sum.finished)} />
+            <div className="home-empty">
+              <div>
+                <Kicker>Your library is ready</Kicker>
+                <p>Add your first PDF to begin.</p>
+              </div>
+              <LinkButton to="/add" variant="primary" icon="plus">
+                Add a book
+              </LinkButton>
             </div>
-            <span className="mini-stats__note">
-              {fmtWords(sum.read, true)} of {fmtWords(sum.words, true)} words read
-              across the library
-            </span>
           </Card>
         )}
-      </section>
-
-      {/* ---- how it works ---------------------------------------------- */}
-      <section className="howto">
-        <h2 className="block__title">How it works</h2>
-        <div className="howto__grid">
-          <HowStep
-            n="01"
-            icon="file"
-            title="Bring a book"
-            body="Drop in a PDF. The detector reads its outline — or its printed contents page — to work out where the chapters actually begin."
-          />
-          <HowStep
-            n="02"
-            icon="layers"
-            title="Check the outline"
-            body="Front matter, indexes and notes are unchecked by default. Add or remove any section from the reader's contents panel."
-          />
-          <HowStep
-            n="03"
-            icon="play"
-            title="Read"
-            body="Set your pace and press space. Your position is saved as you go, so closing the tab never loses your place."
-          />
-        </div>
       </section>
     </div>
   );
@@ -227,38 +166,6 @@ function ResumeCard({
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="ministat">
-      <span className="ministat__value tnum">{value}</span>
-      <span className="ministat__label">{label}</span>
-    </span>
-  );
-}
-
-function HowStep({
-  n,
-  icon,
-  title,
-  body,
-}: {
-  n: string;
-  icon: Parameters<typeof Icon>[0]["name"];
-  title: string;
-  body: string;
-}) {
-  return (
-    <article className="howstep nm-raise">
-      <span className="howstep__n tnum">{n}</span>
-      <span className="howstep__icon">
-        <Icon name={icon} size={20} />
-      </span>
-      <h3 className="howstep__title">{title}</h3>
-      <p className="howstep__body">{body}</p>
-    </article>
-  );
-}
-
 /* ------------------------------------------------------------------ demo */
 
 /**
@@ -269,34 +176,16 @@ function HowStep({
  * change, this changes with them. Stops cleanly when the tab is hidden, so a
  * backgrounded home page is not silently burning a timer.
  */
-function DemoStage() {
+function DemoStage({
+  index,
+  onWordChange,
+}: {
+  index: number;
+  onWordChange: (index: number) => void;
+}) {
   const reduce = useReducedMotion();
-  const words = useMemo<Word[]>(
-    () =>
-      DEMO_SENTENCE.split(/\s+/)
-        .filter(Boolean)
-        .map(toWord),
-    [],
-  );
-
-  const [i, setI] = useState(0);
-  const [wpm] = useState(420);
-
-  /**
-   * The underline's geometry, measured from the word actually on screen.
-   *
-   * Three separate spans rather than one centred mark, because the underline
-   * has to say *which word* is being read: it starts where the word starts and
-   * ends where it ends, so its width changes with every word and your eye
-   * learns the shape of the beat rather than just its position. A fixed mark
-   * would sit under the pivot and tell you nothing new, since the pivot is
-   * already the brightest thing on screen.
-   */
-  const preRef = useRef<HTMLSpanElement | null>(null);
-  const postRef = useRef<HTMLSpanElement | null>(null);
-  const [span, setSpan] = useState<{ left: number; width: number } | null>(null);
-  /** The sweep's containing block — see the note on the measurement below. */
-  const stageRef = useRef<HTMLDivElement | null>(null);
+  const words = DEMO_WORDS;
+  const wpm = DEMO_WPM;
 
   useEffect(() => {
     if (reduce) return;
@@ -305,11 +194,11 @@ function DemoStage() {
 
     const step = () => {
       if (cancelled) return;
-      const w = words[i % words.length];
+      const w = words[index % words.length];
       const delay = (60_000 / wpm) * (w.pause || 1);
       timer = window.setTimeout(() => {
         if (cancelled) return;
-        setI((v) => (v + 1) % words.length);
+        onWordChange((index + 1) % words.length);
       }, delay);
     };
 
@@ -318,116 +207,44 @@ function DemoStage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [i, wpm, words, reduce]);
+  }, [index, onWordChange, reduce, words, wpm]);
 
-  const word = words[i % words.length];
+  const word = words[index % words.length];
   const [pre, pivot, post] = word ? splitAtOrp(word) : ["", "", ""];
-  const lineRef = useRef<HTMLDivElement | null>(null);
-
-  /**
-   * How long this word stays on screen — the same number the tick above uses.
-   *
-   * The underline travels across a fraction of it, so the sweep always lands
-   * before the word changes. A spring was tried first and was wrong here: at
-   * 420 wpm a word lasts 143 ms, and a spring that looks luxurious at 60 fps is
-   * still travelling at 143 ms, so the underline spent the entire beat chasing
-   * the word and never once sat under it. Scaling to the beat means the effect
-   * stays correct at 150 wpm and at 900.
-   */
-  const beat = (60_000 / wpm) * (word?.pause || 1);
-  const travel = Math.max(70, Math.min(beat * 0.5, 190));
-
-  /**
-   * Re-measure after every word.
-   *
-   * Measured from the *rendered* spans rather than computed from character
-   * counts, because the stage is laid out on a grid with a proportional serif:
-   * one "m" is not two "i"s, and a computed width would visibly disagree with
-   * the glyphs above it. `getBoundingClientRect` after paint is the only thing
-   * that is guaranteed to match.
-   *
-   * The origin is the **stage**, not the word row, and that is load-bearing:
-   * the sweep is `position: absolute`, so its `left` is resolved against its
-   * containing block's *padding box*, which is the stage. Measuring against the
-   * word div instead left the sweep permanently 18px to the left — exactly the
-   * stage's horizontal padding — and it read as a lag rather than an offset.
-   *
-   * `useLayoutEffect` and not `useEffect`: the underline has to be in its new
-   * place in the same frame the word appears, or it trails the word by one
-   * frame and the whole effect reads as lag — which is precisely what this
-   * page is claiming the product does not do.
-   */
-  useLayoutEffect(() => {
-    const stage = stageRef.current;
-    const a = preRef.current;
-    const b = postRef.current;
-    if (!stage || !a || !b) return;
-    const box = stage.getBoundingClientRect();
-    const start = a.getBoundingClientRect();
-    const end = b.getBoundingClientRect();
-    if (!box.width) return;
-    setSpan({
-      left: start.left - box.left,
-      width: Math.max(end.right - start.left, 1),
-    });
-  }, [i, words]);
-
   return (
     <div className="demo">
       <div className="demo__chrome">
-        <span className="demo__dot" />
-        <span className="demo__dot" />
-        <span className="demo__dot" />
+        <span className="demo__dot demo__dot--close" aria-hidden="true" />
+        <span className="demo__dot demo__dot--minimize" aria-hidden="true" />
+        <span className="demo__dot demo__dot--maximize" aria-hidden="true" />
         <span className="demo__name">Reading — {wpm} wpm</span>
       </div>
 
-      <div className="demo__stage" ref={stageRef}>
-        <div className="demo__word" ref={lineRef}>
-          {/* The refs sit on *inner* inline spans, not on the grid cells.
-              A grid cell is a block and stretches to fill its track, so
-              measuring it returns the track's box — `pre` and `post` would
-              both report the full line width and the sweep would sit still
-              under the whole sentence. An inline element's box is exactly its
-              text, which is what the underline has to follow. */}
+      <div className="demo__stage">
+        <span className="demo__tick demo__tick--top" aria-hidden="true" />
+        <span className="demo__tick demo__tick--bottom" aria-hidden="true" />
+        <div className="demo__word">
           <span className="demo__pre">
-            <span ref={preRef}>{pre}</span>
+            <span>{pre}</span>
           </span>
           <span className="demo__pivot">{pivot}</span>
           <span className="demo__post">
-            <span ref={postRef}>{post}</span>
+            <span>{post}</span>
           </span>
         </div>
-
-        {/* The sweep. It is driven by a live measurement of the word above it,
-            so its width changes with every word and the eye learns the shape of
-            the beat rather than just its position. `initial={false}` so the
-            first word does not slide in from the left edge. */}
-        <motion.span
-          className="demo__sweep"
-          aria-hidden="true"
-          initial={false}
-          animate={
-            span
-              ? { left: span.left, width: span.width, opacity: 1 }
-              : { opacity: 0 }
-          }
-          transition={{
-            duration: travel / 1000,
-            ease: [0.16, 1, 0.3, 1],
-          }}
-        />
+        <span className="demo__wpm">{wpm} wpm</span>
       </div>
 
       <div className="demo__foot">
         <span className="demo__bar">
           <motion.span
             className="demo__fill"
-            animate={{ width: `${(((i % words.length) + 1) / words.length) * 100}%` }}
+            animate={{ width: `${(((index % words.length) + 1) / words.length) * 100}%` }}
             transition={{ duration: 0.18, ease: "linear" }}
           />
         </span>
         <span className="demo__clock tnum">
-          {clock(((i % words.length) / wpm) * 60)}
+          {clock(((index % words.length) / wpm) * 60)}
         </span>
       </div>
     </div>

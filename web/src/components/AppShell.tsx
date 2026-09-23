@@ -46,10 +46,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="ambient" aria-hidden="true">
+      <div className="ambient ambient--app" aria-hidden="true">
         <span className="ambient__blob" />
       </div>
-      <div className="grain" aria-hidden="true" />
+      <div className="grain grain--app" aria-hidden="true" />
 
       <div
         className={[
