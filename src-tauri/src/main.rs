@@ -43,7 +43,7 @@ fn main() {
                 let port = listener.local_addr()?.port();
                 drop(listener);
 
-                let (command, _events) = app
+                let (_events, command) = app
                     .shell()
                     .sidecar("rsvp-backend")?
                     .env("RSVP_HOST", "127.0.0.1")
