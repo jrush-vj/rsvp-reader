@@ -1,0 +1,122 @@
+name: Desktop releases
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows
+          - name: Windows ARM64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            platform: windows
+          - name: Linux x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            platform: linux
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file libayatana-appindicator3-dev librsvg2-dev patchelf libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install JavaScript dependencies
+        run: |
+          npm ci
+          npm ci --prefix web
+      - name: Build frontend
+        run: npm run build:frontend
+      - name: Build backend sidecar
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          python -m pip install -r requirements.txt
+          python desktop/build_backend.py "$env:TARGET"
+        shell: pwsh
+        if: runner.os == 'Windows'
+      - name: Build backend sidecar (Linux)
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          python -m pip install -r requirements.txt
+          python desktop/build_backend.py "$TARGET"
+        if: runner.os == 'Linux'
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: npx tauri build --target ${{ matrix.target }} --bundles nsis
+      - name: Build Linux installers
+        if: runner.os == 'Linux'
+        run: npx tauri build --target ${{ matrix.target }} --bundles appimage,deb
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: booktube-${{ matrix.platform }}-${{ matrix.target }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/**
+            !src-tauri/target/${{ matrix.target }}/release/bundle/**/*.sig
+
+  publish:
+    if: github.event_name == 'push'
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          shopt -s globstar nullglob
+          assets=(release-assets/**/*.{exe,msi,AppImage,deb})
+          if (( ${#assets[@]} == 0 )); then
+            echo "No installer assets were produced" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --generate-notes
+          else
+            tag="build-${GITHUB_SHA::12}"
+            gh release create "$tag" "${assets[@]}" --generate-notes --prerelease --title "Build ${GITHUB_SHA::12}"
+          fi

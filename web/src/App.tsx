@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { Spinner } from "./components/ui/Feedback";
 import { LibraryProvider } from "./store/library";
@@ -8,10 +8,8 @@ import { ToastProvider } from "./store/toast";
 /**
  * Routing.
  * ---------------------------------------------------------------------------
- * `BrowserRouter`, not a hash router: the app is hosted online with real URLs,
- * which needs the server to fall back to `index.html` for unknown paths. Flask
- * does that via the catch-all in `app.py`; in dev, Vite's `historyApiFallback`
- * handles it.
+ * Hash routing works with Tauri's bundled assets without a web server providing
+ * history fallbacks for nested routes.
  *
  * The reader sits *outside* `AppShell`. It takes the whole viewport, so giving
  * it the sidebar would mean either a layout that changes shape when you open a
@@ -66,7 +64,7 @@ function RouteFallback() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <ToastProvider>
         <LibraryProvider>
           <Suspense fallback={<RouteFallback />}>
@@ -93,7 +91,7 @@ export default function App() {
           </Suspense>
         </LibraryProvider>
       </ToastProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 

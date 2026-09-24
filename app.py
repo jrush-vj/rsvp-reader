@@ -37,7 +37,8 @@ import tempfile
 import time
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 from flask_cors import CORS
 
 import clientbuild
@@ -45,33 +46,12 @@ import detector
 import pdftext
 import tokenizer
 
-BASE_DIR = Path(__file__).resolve().parent
-HTML_FILENAME = "rsvp_reader.html"
-BOOKS_DIR = BASE_DIR / "books"
-# The React front end, built by `npm run build` inside `web/`. Absent in a
-# checkout that has not been built yet, which is why every route below still
-# falls back to the original single-file reader.
-DIST_DIR = BASE_DIR / "web" / "dist"
+BASE_DIR = Path(os.environ.get("RSVP_APP_ROOT", Path(__file__).resolve().parent))
+DATA_DIR = os.environ.get("RSVP_DATA_DIR")
+BOOKS_DIR = Path(DATA_DIR) / "books" if DATA_DIR else BASE_DIR / "books"
 
-
-def dist_file(rel: str) -> Path | None:
-    """
-    Resolve a path inside `web/dist`, or None if it does not exist.
-
-    `resolve()` plus `is_relative_to` is what keeps a crafted URL like
-    ``/../../app.py`` from escaping the build directory.
-    """
-    if not DIST_DIR.is_dir():
-        return None
-    candidate = (DIST_DIR / rel.lstrip("/")).resolve()
-    try:
-        candidate.relative_to(DIST_DIR.resolve())
-    except ValueError:
-        return None
-    return candidate if candidate.is_file() else None
-
-app = Flask(__name__)
-CORS(app)  # harmless now that we serve same-origin; keeps file:// usage working too
+app = Flask(__name__, static_folder=None)
+CORS(app, origins=["tauri://localhost", "http://tauri.localhost", "http://localhost:5173"])
 
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB upload cap
 
@@ -158,29 +138,6 @@ def compress_json(response):
     # this gzipped body to a client that never asked for gzip, and to hand an
     # uncompressed body to one that did.
     response.headers.add("Vary", "Accept-Encoding")
-    return response
-
-
-@app.after_request
-def cache_headers(response):
-    """
-    Cache policy for the two kinds of thing this server sends.
-
-    Vite writes the front end's assets with a content hash in the filename, so
-    a given URL's bytes never change — a rebuild produces a new name. Those can
-    be cached indefinitely. `index.html` is the opposite: it is the file that
-    names the current hashes, so it must be revalidated on every load or a
-    deploy would keep pointing at the previous bundle.
-
-    `send_from_directory` already supplies a `Last-Modified` and an `ETag`, so
-    `no-cache` costs a 304 rather than a re-download — the shell is revalidated,
-    not re-fetched.
-    """
-    path = request.path
-    if response.status_code == 200 and path.startswith("/assets/"):
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    elif response.mimetype == "text/html":
-        response.headers["Cache-Control"] = "no-cache"
     return response
 
 
@@ -598,68 +555,6 @@ def patch_section(book_id: str, section_id: str):
     return jsonify({"book": summarise(meta, state), "state": state})
 
 
-# ---------------------------------------------------------------------------
-# Standalone single-shot flow (nothing stored)
-# ---------------------------------------------------------------------------
-
-
-@app.route("/", methods=["GET"])
-def index():
-    """
-    The app's front door.
-
-    Serves the built React app when `web/dist` exists, and the original
-    single-file reader otherwise, so the server is useful before the front end
-    has ever been built.
-    """
-    shell = dist_file("index.html")
-    if shell is not None:
-        return send_from_directory(shell.parent, shell.name)
-
-    html_path = BASE_DIR / HTML_FILENAME
-    if not html_path.exists():
-        return (
-            "No front end found. Either build the React app "
-            "(cd web && npm install && npm run build), or put "
-            f"{HTML_FILENAME} next to app.py ({BASE_DIR}).",
-            500,
-        )
-    return send_from_directory(BASE_DIR, HTML_FILENAME)
-
-
-@app.route("/<path:path>", methods=["GET"])
-def spa(path: str):
-    """
-    History-API fallback for the React app.
-
-    The front end uses `BrowserRouter`, so `/library` and `/read/<id>` are real
-    URLs that only exist on the client. Anything that is not an API call and
-    not a real file in the build is answered with `index.html` so a deep link
-    or a refresh lands on the app instead of a 404.
-
-    Two deliberate guards:
-
-    - `/api/...` is never answered with HTML. A mistyped endpoint must return
-      JSON, not a page, or a client parsing the response fails confusingly.
-    - Flask's built-in static route is matched first, so anything actually on
-      disk is served as itself.
-    """
-    if path.startswith("api/"):
-        return jsonify({"error": f"No such endpoint: /{path}"}), 404
-
-    asset = dist_file(path)
-    if asset is not None:
-        return send_from_directory(asset.parent, asset.name)
-
-    shell = dist_file("index.html")
-    if shell is not None:
-        return send_from_directory(shell.parent, shell.name)
-
-    # No build: fall back to the original reader for its own single page, and
-    # 404 honestly for anything else.
-    return jsonify({"error": f"Not found: /{path}"}), 404
-
-
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
@@ -711,4 +606,9 @@ def upload():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(
+        host=os.environ.get("RSVP_HOST", "127.0.0.1"),
+        port=int(os.environ.get("RSVP_PORT", "5000")),
+        debug=False,
+        use_reloader=False,
+    )

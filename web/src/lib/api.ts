@@ -4,6 +4,7 @@ import type {
   BookSummary,
   StreamPayload,
 } from "./types";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 
 /**
  * The API client.
@@ -44,7 +45,8 @@ function networkError(cause: unknown): ApiError {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, init);
+    const base = isTauri() ? await invoke<string>("backend_url") : "";
+    res = await fetch(`${base}${path}`, init);
   } catch (cause) {
     throw networkError(cause);
   }

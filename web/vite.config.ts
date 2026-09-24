@@ -2,11 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 
-// The dev server talks to the Flask API on 5000, so the app is written against
-// same-origin `/api/...` paths and works identically in dev, in `vite preview`,
-// and behind Flask in production. Proxying rather than using an absolute
-// backend URL means there is no CORS preflight and no second origin to
-// configure — the built bundle has no environment-specific constant baked in.
+// Browser development proxies the Flask API. In packaged Tauri builds the
+// client resolves its loopback API address from the Rust host.
 export default defineConfig({
   plugins: [react()],
   resolve: {

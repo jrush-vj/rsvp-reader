@@ -6,7 +6,7 @@ chapter title shown full-screen each time you cross into a new section, so you
 always know where you are.
 
 Everything runs on your own machine. There is no AI model, no API key, and no
-network call beyond `localhost`.
+network call beyond the local app process.
 
 ---
 
@@ -24,37 +24,50 @@ network call beyond `localhost`.
    seconds — skippable with Space, Enter, Escape or a click — and then the words
    start from that section's first word.
 
-The app is a small multi-page shell rather than one long screen: a sidebar menu
-on the left, the page body in the middle, and — in the reader — a chapter rail
-on the right. Every page has its own address, so the back button and a bookmark
-both work.
+The app is a small multi-page desktop interface rather than one long screen: a
+sidebar menu on the left, the page body in the middle, and — in the reader — a
+chapter rail on the right. Navigation stays in the app window.
 
-Your position and your section choices are saved per book, so closing the tab
-and coming back offers **Resume** or **Start over**.
+Your position and your section choices are saved per book, so closing and
+reopening the app offers **Resume** or **Start over**.
 
 ---
 
-## Setup
+## Desktop App
 
-Python 3.11 or newer.
+BookTube is a Tauri desktop application for Windows and Linux. Install the
+platform/architecture package from the latest GitHub Release. The app runs its
+local PDF-processing backend on loopback and stores books and reading state in
+the operating system's application-data directory. No browser, Python install,
+account, or network connection is needed after installation.
+
+### Development
+
+Install Node.js 22, Python 3.11+, Rust, and the Tauri system prerequisites for
+your OS. Install Python dependencies with `python -m pip install -r
+requirements.txt`, then install both npm dependency sets:
 
 ```bash
-python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt   # Windows
-# .venv/bin/pip install -r requirements.txt     # macOS / Linux
+npm ci
+npm ci --prefix web
+npm run dev
 ```
 
-Then start the server:
+To build locally, prepare the Rust-target-named Python sidecar and package it:
 
 ```bash
-python app.py
+python -m pip install pyinstaller
+python desktop/build_backend.py x86_64-pc-windows-msvc
+npm run build
 ```
 
-Open <http://localhost:5000>. That single address serves both the API and the
-reader UI, so there is no second file to open.
+Use the matching Rust target triple for the machine being built. Linux builds
+also require Tauri's WebKitGTK and GTK development packages.
 
-`requirements.txt` pins `pypdf` rather than PyMuPDF on purpose: it is pure
-Python, so it installs on Windows on ARM64 where PyMuPDF publishes no wheel.
+Pushes to `master` publish prerelease builds automatically. Pushing a `v*` tag
+(for example `v1.1.0`) publishes a versioned GitHub Release. The workflow builds
+Windows x64 and ARM64 NSIS installers and Linux x64 and ARM64 AppImage and `.deb`
+packages on native GitHub Actions runners.
 
 ---
 
@@ -66,7 +79,7 @@ Python, so it installs on Windows on ARM64 where PyMuPDF publishes no wheel.
 | --------- | ------------ | -------------------------------------------------------------- |
 | Dashboard | `#`          | Library at a glance: totals, what to continue, and a setup checklist |
 | Library   | `#library`   | Every processed book, with **Open** and **Delete**              |
-| Add a book| `#add`       | The PDF drop zone, the paste box, and the backend address       |
+| Add a book| `#add`       | The PDF drop zone and paste box                                 |
 | Timelines | `#timelines`  | One reading lane per book, divided into its chapters            |
 | Settings  | `#settings`  | Reading speed, backend address, chapter title cards             |
 | Picker    | `#picker`    | A book's section tree (reached from a book row)                 |
@@ -146,16 +159,18 @@ Options: `--book-id` to override the id, `--out` to choose the output directory,
 
 ---
 
-## How it's put together
+## How It's Put Together
 
 ```
-app.py            Flask API and static file server
+app.py            loopback-only Flask API sidecar
 detector.py       finds the book's structure (heuristics only)
 pdftext.py        PDF -> per-page lines plus font metadata
 sections.py       turns entries into a tree, strips headings, counts words
 tokenizer.py      text -> words, with ORP index and pause multiplier per word
 clientbuild.py    writes the per-section word files the frontend reads
-rsvp_reader.html  the entire frontend: one file, vanilla JS, no build step
+src-tauri/        Rust/Tauri desktop host and backend sidecar lifecycle
+web/              React + Vite desktop frontend
+desktop/          Python backend bundling helper
 scripts/          verifiers and one-off inspection tools
 ```
 
@@ -185,7 +200,7 @@ books/<book_id>/
 
 Words are precomputed because tokenising is deterministic — the same text
 always yields the same words, offsets and pauses — so opening a book is a file
-read instead of a PDF parse, and a server serving an already-processed book
+read instead of a PDF parse, and the backend serving an already-processed book
 never touches `pypdf`.
 
 `clientbuild.py` documents the one invariant it enforces, from a single source
@@ -208,7 +223,7 @@ meta.json word_count == len(client/<section_id>.json["words"])
 | `PUT`    | `/api/books/<id>/state`               | merge a position and/or choices       |
 | `PATCH`  | `/api/books/<id>/sections/<section_id>` | toggle one section                 |
 | `POST`   | `/api/upload`                         | tokenise a PDF, store nothing        |
-| `GET`    | `/`                                   | the reader UI                        |
+| `GET`    | `/api/health`                         | local backend health check           |
 
 A PDF with no extractable text is rejected with **422** and an explanation that
 it is probably scanned images needing OCR first. That is deliberate: OCR is not
@@ -218,7 +233,7 @@ attempted here.
 
 ## Verifying it
 
-With the server running:
+With the local backend running:
 
 ```bash
 python scripts/verify_tokenizer.py                            # token offsets and pauses

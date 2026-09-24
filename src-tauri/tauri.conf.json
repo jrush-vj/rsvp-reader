@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BookTube",
+  "version": "1.0.0",
+  "identifier": "org.booktube.reader",
+  "build": {
+    "beforeDevCommand": "npm run dev --prefix web",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build:frontend",
+    "frontendDist": "../web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "BookTube",
+        "width": 1320,
+        "height": 900,
+        "minWidth": 720,
+        "minHeight": 560,
+        "backgroundColor": "#000000"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' asset: http://asset.localhost http://127.0.0.1:*; connect-src ipc: http://ipc.localhost http://127.0.0.1:*; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "externalBin": ["binaries/rsvp-backend"],
+    "resources": []
+  }
+}

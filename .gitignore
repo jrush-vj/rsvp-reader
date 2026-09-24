@@ -17,3 +17,8 @@ scripts/_reader_script.js
 web/node_modules/
 web/dist/
 web/*.tsbuildinfo
+node_modules/
+release/
+desktop/backend/
+src-tauri/target/
+src-tauri/binaries/
