@@ -28,10 +28,10 @@ enum BackendChild {
 }
 
 impl BackendChild {
-    fn stop(&mut self) {
+    fn stop(self) {
         match self {
             #[cfg(debug_assertions)]
-            Self::Development(child) => {
+            Self::Development(mut child) => {
                 let _ = child.kill();
                 let _ = child.wait();
             }
@@ -120,7 +120,7 @@ fn main() {
                 thread::sleep(Duration::from_millis(100));
             }
             if !ready {
-                if let Some(mut child) = backend_state.child.lock().unwrap().take() {
+                if let Some(child) = backend_state.child.lock().unwrap().take() {
                     child.stop();
                 }
                 return Err(std::io::Error::new(
@@ -137,7 +137,7 @@ fn main() {
         .expect("error while building Tauri application")
         .run(move |_app, event| {
             if let tauri::RunEvent::Exit = event {
-                if let Some(mut child) = backend.child.lock().unwrap().take() {
+                if let Some(child) = backend.child.lock().unwrap().take() {
                     child.stop();
                 }
             }
