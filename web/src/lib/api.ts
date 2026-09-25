@@ -9,10 +9,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 /**
  * The API client.
  * ---------------------------------------------------------------------------
- * Every call is same-origin `/api/...`. In dev, Vite proxies that to Flask on
- * 5000; in production Flask serves the bundle itself. Because the base is a
- * relative path there is no environment-specific constant to configure, and no
- * CORS preflight in either mode.
+ * In browser development, Vite proxies `/api/...` to Flask on 5000. In the
+ * packaged desktop app, the Tauri host supplies the backend's loopback URL.
  */
 
 /** An error carrying the server's own message, so the UI can show it verbatim. */

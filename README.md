@@ -24,9 +24,9 @@ network call beyond the local app process.
    seconds — skippable with Space, Enter, Escape or a click — and then the words
    start from that section's first word.
 
-The app is a small multi-page desktop interface rather than one long screen: a
-sidebar menu on the left, the page body in the middle, and — in the reader — a
-chapter rail on the right. Navigation stays in the app window.
+The app is a multi-page desktop interface with a sidebar and chapter rail. The
+React UI in `web/` is bundled inside the Tauri application; it is not separately
+hosted as a website.
 
 Your position and your section choices are saved per book, so closing and
 reopening the app offers **Resume** or **Start over**.
@@ -44,25 +44,23 @@ account, or network connection is needed after installation.
 ### Development
 
 Install Node.js 22, Python 3.11+, Rust, and the Tauri system prerequisites for
-your OS. Install Python dependencies with `python -m pip install -r
-requirements.txt`, then install both npm dependency sets:
+your OS. Install the Python and npm dependencies, then launch the desktop app:
 
 ```bash
+python -m pip install -r requirements.txt
 npm ci
 npm ci --prefix web
 npm run dev
 ```
 
-To build locally, prepare the Rust-target-named Python sidecar and package it:
+To build locally, install PyInstaller and package for your current Rust target:
 
 ```bash
 python -m pip install pyinstaller
-python desktop/build_backend.py x86_64-pc-windows-msvc
 npm run build
 ```
 
-Use the matching Rust target triple for the machine being built. Linux builds
-also require Tauri's WebKitGTK and GTK development packages.
+Linux builds also require Tauri's WebKitGTK and GTK development packages.
 
 Pushes to `master` publish prerelease builds automatically. Pushing a `v*` tag
 (for example `v1.1.0`) publishes a versioned GitHub Release. The workflow builds
@@ -77,43 +75,23 @@ packages on native GitHub Actions runners.
 
 | Page      | Route        | What it is                                                     |
 | --------- | ------------ | -------------------------------------------------------------- |
-| Dashboard | `#`          | Library at a glance: totals, what to continue, and a setup checklist |
-| Library   | `#library`   | Every processed book, with **Open** and **Delete**              |
-| Add a book| `#add`       | The PDF drop zone and paste box                                 |
-| Timelines | `#timelines`  | One reading lane per book, divided into its chapters            |
-| Settings  | `#settings`  | Reading speed, backend address, chapter title cards             |
-| Picker    | `#picker`    | A book's section tree (reached from a book row)                 |
-| Reader    | `#read`      | The word stage (reached by starting a book)                     |
+| Home      | `#/`          | Library overview and continue reading                     |
+| Library   | `#/library`   | Processed books, with **Open** and **Delete**              |
+| Add a book| `#/add`       | PDF drop zone and paste box                                 |
+| Reader    | `#/read/<id>` | Select sections, then read the book                        |
 
-A book's picker and the reader are deliberately *not* in the menu: both are
-about one specific book, and the menu holds only destinations that make sense
-without one.
-
-**Dashboard.** Books, words read, share of what you chose, in-progress and
-finished counts, and the time still to read. Below that is **Continue reading**
-with the book you were last in, then a short checklist of the things that make
-the app work.
+**Home.** Shows reading activity and offers to continue the most recent book.
 
 **Add a book.** Drop a PDF on the drop zone, or click to browse. The PDF is
-parsed once and kept, so opening it again later is a file read rather than a
-re-parse. The paste box is on the same page and reads a block of text — meeting
-notes, an article — with no backend and nothing saved.
+parsed once and kept, so reopening it later does not require parsing it again.
+The paste box reads a block of text locally without adding it to the library.
 
-**Library.** Every processed book is listed with its word count, section count,
-the detection method used, and how far through it you are. **Open** (or
-**Resume**) goes to the picker; **Delete** asks first and names the file.
+**Library.** Lists processed books with word count, section count, detection
+method, and reading progress. **Open** or **Resume** opens a book; **Delete**
+removes it from local app data.
 
-**Timelines.** Each book gets a lane split into its chapters, sized by word
-count, so the shape of a book is visible before you open it. The current chapter
-is marked and completed ones are ticked. Clicking a chapter jumps straight into
-the reader at that chapter's first word. The picker carries the same lane above
-the tree; there, clicking a chapter scrolls to and highlights its row.
-
-**The picker.** Rows you can act on have a live checkbox; front and back matter
-the reader is deliberately not offered are dimmed and disabled, shown so the
-book's structure stays legible. **Select all** / **Select none** work on the
-whole tree. If you have a saved position, a note at the top offers **Resume** or
-**Start over**.
+**Reader.** Choose which sections to read, then start or resume playback. The
+chapter bar, chapter rail, and title cards all navigate the same reading stream.
 
 ### While reading
 
@@ -191,7 +169,7 @@ boundary repair behave identically regardless of how the entries were found.
 ### Schema v2, on disk
 
 ```
-books/<book_id>/
+<app-data>/books/<book_id>/
     book.pdf              the original, so a book can be reprocessed
     meta.json             the structure, with word counts and previews
     state.json            where you left off and which sections you chose
@@ -222,7 +200,6 @@ meta.json word_count == len(client/<section_id>.json["words"])
 | `GET`    | `/api/books/<id>/state`               | saved position and choices           |
 | `PUT`    | `/api/books/<id>/state`               | merge a position and/or choices       |
 | `PATCH`  | `/api/books/<id>/sections/<section_id>` | toggle one section                 |
-| `POST`   | `/api/upload`                         | tokenise a PDF, store nothing        |
 | `GET`    | `/api/health`                         | local backend health check           |
 
 A PDF with no extractable text is rejected with **422** and an explanation that
@@ -240,9 +217,8 @@ python scripts/verify_tokenizer.py                            # token offsets an
 python scripts/verify_detector.py                             # structure detection heuristics
 python scripts/verify_api.py                                   # endpoint behaviour
 python scripts/verify_book.py                                  # on-disk book vs schema
-python scripts/verify_upload.py                                # upload validation
+python scripts/verify_upload.py                                # library PDF upload validation
 python scripts/verify_ui_contract.py http://127.0.0.1:5000 <book_id>   # the JSON the UI reads
-python scripts/check_reader_js.py                              # frontend script and its element ids
 ```
 
 `verify_ui_contract.py` is the load-bearing one for the frontend: it checks that
@@ -264,5 +240,5 @@ compares an on-disk book against the current schema.
 - **No OCR.** Scanned PDFs are refused with a clear message rather than
   silently producing nothing.
 - **PDF only.** No EPUB.
-- **One machine.** No accounts and no cross-device sync; state is a file next to
-  the book.
+- **One machine.** No accounts and no cross-device sync; state is saved in the
+  operating system's app-data directory.

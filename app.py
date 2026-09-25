@@ -9,22 +9,10 @@ as a directory under `books/`. Opening it later is a file read, not a PDF parse,
 which is what makes the library screen instant and the reader's progress
 resumable across restarts.
 
-**The single-shot flow.** `POST /api/upload` still takes a PDF and hands back a
-tokenised word list in one response, for a reader that wants nothing stored. It
-shares its tokeniser with the library path, so a book reads identically
-whichever door it came through.
-
-Every word carries:
-
-  - ``text``:  the word itself
-  - ``orp``:   character index to highlight (Optimal Recognition Point)
-  - ``pause``: a multiplier on the base per-word delay, so punctuation gets a
-               natural extra beat instead of flying past at reading speed
-
 Setup:
     pip install -r requirements.txt
     python app.py
-    -> serves on http://0.0.0.0:5000
+    -> serves the local API on http://127.0.0.1:5000
 """
 
 from __future__ import annotations
@@ -39,12 +27,8 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from flask_cors import CORS
 
 import clientbuild
-import detector
-import pdftext
-import tokenizer
 
 BASE_DIR = Path(os.environ.get("RSVP_APP_ROOT", Path(__file__).resolve().parent))
 DATA_DIR = os.environ.get("RSVP_DATA_DIR")
@@ -212,21 +196,6 @@ def resolve_selections(meta: dict, state: dict) -> dict[str, bool]:
     superset and callers must look up the ids they care about.
     """
     return {**default_selections(meta), **(state.get("selections") or {})}
-
-
-def extract_text(pdf_path: Path) -> str:
-    """
-    A PDF's whole text as one prose string, for the single-shot flow.
-
-    This deliberately runs the same extraction the library path uses - read the
-    pages structurally, then normalise - rather than a plain pypdf call. A
-    quick extract would split every drop cap and fuse words across missing
-    spaces, so the same book would read noticeably worse through `/api/upload`
-    than through the library.
-    """
-    pages = pdftext.read_pages(pdftext.open_reader(str(pdf_path)))
-    return detector.normalise_prose(detector.range_text(pages, 1, len(pages)))
-
 
 
 # ---------------------------------------------------------------------------
@@ -558,51 +527,6 @@ def patch_section(book_id: str, section_id: str):
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
-
-
-@app.route("/api/upload", methods=["POST"])
-def upload():
-    """
-    Tokenise a PDF in one request and store nothing.
-
-    Kept for the standalone reader and as the fallback when a book does not
-    need to be kept. It shares `tokenizer` with the library path, so the words
-    come out annotated identically either way.
-    """
-    upload_file = request.files.get("file")
-    if upload_file is None:
-        return jsonify({
-            "error": "No file field in request. Send multipart/form-data with key 'file'."
-        }), 400
-    if not upload_file.filename:
-        return jsonify({"error": "Empty filename."}), 400
-    if not upload_file.filename.lower().endswith(".pdf"):
-        return jsonify({"error": "Only .pdf files are supported."}), 400
-
-    handle, temp_name = tempfile.mkstemp(suffix=".pdf")
-    os.close(handle)
-    temp_path = Path(temp_name)
-
-    try:
-        upload_file.save(temp_path)
-        text = extract_text(temp_path)
-    except Exception as exc:  # malformed / encrypted / unreadable PDF
-        return jsonify({"error": f"Could not read this PDF: {exc}"}), 400
-    finally:
-        temp_path.unlink(missing_ok=True)
-
-    if not text:
-        return jsonify({
-            "error": "No extractable text found. This PDF is likely scanned "
-                     "images rather than real text, so it would need OCR first."
-        }), 422
-
-    words = tokenizer.tokenize(text)
-    return jsonify({
-        "filename": upload_file.filename,
-        "word_count": len(words),
-        "words": words,
-    })
 
 
 if __name__ == "__main__":

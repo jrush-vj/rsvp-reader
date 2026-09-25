@@ -1,9 +1,0 @@
-.git
-.venv
-__pycache__
-books
-backups
-tmp
-web/node_modules
-web/dist
-*.pyc
