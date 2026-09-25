@@ -2014,6 +2014,70 @@
   margin: 0;
 }
 
+.ebook {
+  position: absolute;
+  inset: 68px 0 180px;
+  overflow: auto;
+  padding: 28px 24px 44px;
+  scrollbar-color: var(--surface-4) transparent;
+}
+
+.ebook:focus-visible {
+  outline: 1px solid var(--line-2);
+  outline-offset: -2px;
+}
+
+.ebook__page {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  color: var(--ink-2);
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  line-height: 1.9;
+}
+
+.ebook__heading {
+  margin: 2.1em 0 0.8em;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 1.25rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.ebook__paragraph {
+  margin: 0 0 1.25em;
+}
+
+.ebook__word {
+  border-radius: 2px;
+  cursor: pointer;
+  text-decoration-color: transparent;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.ebook__word:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ebook__word.is-covered {
+  color: var(--ink-4);
+  text-decoration-color: rgba(255, 255, 255, 0.42);
+}
+
+.ebook__word.is-current {
+  color: var(--ink);
+  background: rgba(255, 74, 61, 0.16);
+  text-decoration-color: var(--orp);
+  text-decoration-thickness: 2px;
+}
+
+.reader:has(.ebook) .reader__bottom {
+  background: linear-gradient(to top, #000 78%, rgba(0, 0, 0, 0.88) 90%, transparent);
+}
+
 /*
  * The three chrome states. `chrome-on`/`chrome-off` are on the root and the
  * bars animate their own opacity, so these rules only carry what must change

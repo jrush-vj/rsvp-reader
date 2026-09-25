@@ -1,5 +1,7 @@
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { IconButton } from "../components/ui/Button";
@@ -15,6 +17,7 @@ import { toWord } from "../lib/words";
 import type { Word } from "../lib/words";
 import { ChapterBar } from "../reader/ChapterBar";
 import { ChapterRail } from "../reader/ChapterRail";
+import { EbookReader } from "../reader/EbookReader";
 import { ReaderWord } from "../reader/ReaderWord";
 import { TitleCardOverlay } from "../reader/TitleCard";
 import { useReader } from "../reader/useReader";
@@ -79,6 +82,7 @@ export function ReaderPage({ paste = false }: { paste?: boolean }) {
   const [railOpen, setRailOpen] = useState(false);
   const [railPinned, setRailPinned] = useStored("booktube.rail.pinned", false);
   const [chromeShown, setChromeShown] = useState(true);
+  const [ebookMode, setEbookMode] = useState(false);
 
   const { upsertLocal } = useLibrary();
 
@@ -310,6 +314,24 @@ export function ReaderPage({ paste = false }: { paste?: boolean }) {
     return () => window.removeEventListener("beforeunload", onLeave);
   }, [flushSave]);
 
+  useEffect(() => {
+    if (!isTauri()) return;
+    let allowClose = false;
+    let disposed = false;
+    const unlisten = getCurrentWindow().onCloseRequested(async (event) => {
+      if (allowClose) return;
+      event.preventDefault();
+      await flushSave();
+      if (disposed) return;
+      allowClose = true;
+      await getCurrentWindow().close();
+    });
+    return () => {
+      disposed = true;
+      void unlisten.then((stopListening) => stopListening());
+    };
+  }, [flushSave]);
+
   // --- section include / exclude -------------------------------------------
 
   const toggleSection = useCallback(
@@ -414,7 +436,7 @@ export function ReaderPage({ paste = false }: { paste?: boolean }) {
       onMouseMove={revealChrome}
       onClick={(e) => {
         // Clicking the stage resumes; clicking a control must not.
-        if ((e.target as HTMLElement).closest("button, a, input, [role='dialog']")) return;
+        if ((e.target as HTMLElement).closest("button, a, input, [role='button'], [role='dialog'], [data-ebook-content]")) return;
         if (titleCard) dismissTitle();
         else toggle();
       }}
@@ -462,15 +484,31 @@ export function ReaderPage({ paste = false }: { paste?: boolean }) {
               onClick={() => setRailOpen((v) => !v)}
             />
           )}
+          <IconButton
+            name="books"
+            label={ebookMode ? "Switch to RSVP reader" : "Switch to ebook reader with reading progress"}
+            size={18}
+            active={ebookMode}
+            onClick={() => setEbookMode((value) => !value)}
+          />
         </div>
       </motion.header>
 
       {/* ---- the stage ---- */}
-      <ReaderWord
-        word={words[idx]}
-        scale={compact ? 0.82 : 1}
-        wpm={wpm}
-      />
+      {ebookMode ? (
+        <EbookReader
+          words={words}
+          boundaries={boundaries}
+          index={idx}
+          onSeek={seek}
+        />
+      ) : (
+        <ReaderWord
+          word={words[idx]}
+          scale={compact ? 0.82 : 1}
+          wpm={wpm}
+        />
+      )}
 
       {/* ---- bottom ---- */}
       <motion.div

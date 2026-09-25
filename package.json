@@ -5,7 +5,7 @@
   "type": "module",
   "description": "BookTube — read books one word at a time.",
   "scripts": {
-    "dev": "concurrently -k \"python app.py\" \"tauri dev\"",
+    "dev": "tauri dev",
     "build:frontend": "npm run build --prefix web",
     "build": "npm run backend && tauri build",
     "typecheck": "npm run typecheck --prefix web",
@@ -20,7 +20,6 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.8.4",
-    "concurrently": "^9.2.0",
     "@types/node": "^26.6.2",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",

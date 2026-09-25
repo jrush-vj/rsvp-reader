@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Icon, type IconName } from "../components/Icon";
-import { checkHealth } from "../lib/api";
 import { useIsCompact, useStored, RAIL_KEY } from "../lib/storage";
 
 /**
@@ -18,14 +17,12 @@ interface NavEntry {
   to: string;
   label: string;
   icon: IconName;
-  /** Matched with `endsWith`-style logic so a sub-route keeps the parent lit. */
-  match: (path: string) => boolean;
 }
 
 const NAV: NavEntry[] = [
-  { to: "/", label: "Home", icon: "home", match: (p) => p === "/" },
-  { to: "/library", label: "Library", icon: "books", match: (p) => p.startsWith("/library") },
-  { to: "/add", label: "Add a book", icon: "plus", match: (p) => p.startsWith("/add") },
+  { to: "/", label: "Home", icon: "home" },
+  { to: "/library", label: "Library", icon: "books" },
+  { to: "/add", label: "Add a book", icon: "plus" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -128,8 +125,6 @@ function Sidebar({
   onToggle: () => void;
   onNavigate: () => void;
 }) {
-  const online = useBackendStatus();
-
   // On a compact viewport the rail is an off-canvas overlay; `collapsed` (the
   // desktop preference) must not also shrink it, or it would open as a rail of
   // icons with nothing to tap.
@@ -173,12 +168,10 @@ function Sidebar({
           <NavLink
             key={entry.to}
             to={entry.to}
-            end={entry.to === "/"}
+            end
             onClick={onNavigate}
             className={({ isActive }) =>
-              ["navitem", entry.match(location.pathname) || isActive ? "is-active" : ""]
-                .filter(Boolean)
-                .join(" ")
+              `navitem${isActive && location.pathname === entry.to ? " is-active" : ""}`
             }
             title={isMin ? entry.label : undefined}
           >
@@ -190,47 +183,6 @@ function Sidebar({
         ))}
       </nav>
 
-      <div className="rail__foot">
-        <span
-          className={`statusdot ${online ? "is-on" : "is-off"}`}
-          title={online ? "Server reachable" : "Server unreachable"}
-        >
-          <span className="statusdot__dot" />
-          <span className="statusdot__label">{online ? "Backend online" : "Backend offline"}</span>
-        </span>
-      </div>
     </aside>
   );
-}
-
-/**
- * Whether the Flask API is answering.
- *
- * Polled slowly — this is an indicator, not a heartbeat, and a local app's
- * server does not appear and disappear on a timescale where thirty seconds
- * would matter. The first probe runs immediately so the dot is honest on
- * first paint rather than optimistically green.
- */
-function useBackendStatus(): boolean {
-  const [online, setOnline] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    let timer: number | undefined;
-
-    const probe = async () => {
-      const ok = await checkHealth();
-      if (cancelled) return;
-      setOnline(ok);
-      timer = window.setTimeout(probe, 30_000);
-    };
-
-    void probe();
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
-  }, []);
-
-  return online;
 }

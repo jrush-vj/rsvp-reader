@@ -188,12 +188,6 @@ export function useReader(source: ReaderSource, opts: Options) {
     clockRef.current?.postMessage({ type: "stop" });
   }, []);
 
-  const pause = useCallback(() => {
-    playingRef.current = false;
-    setPlayingState(false);
-    stopClock();
-  }, [stopClock]);
-
   const flushSave = useCallback(async () => {
     const id = bookIdRef.current;
     if (!id) return;
@@ -214,6 +208,13 @@ export function useReader(source: ReaderSource, opts: Options) {
       // carries the same position anyway.
     }
   }, [boundaries]);
+
+  const pause = useCallback(() => {
+    playingRef.current = false;
+    setPlayingState(false);
+    stopClock();
+    void flushSave();
+  }, [flushSave, stopClock]);
 
   /** Debounced position save — playback would otherwise write every few seconds. */
   const scheduleSave = useCallback(() => {
